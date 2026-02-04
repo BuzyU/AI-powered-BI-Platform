@@ -1,0 +1,59 @@
+# Backend dependencies for AI-powered BI Platform
+
+# Core Framework
+fastapi==0.109.0
+uvicorn[standard]==0.27.0
+python-multipart==0.0.6
+
+# Database
+sqlalchemy[asyncio]==2.0.25
+asyncpg==0.29.0
+alembic==1.13.1
+psycopg2-binary==2.9.9
+
+# Cache & Queue
+redis==5.0.1
+celery==5.3.6
+
+# Data Processing
+pandas==2.2.0
+polars==0.20.6
+openpyxl==3.1.2
+xlrd==2.0.1
+python-dateutil==2.8.2
+
+# Validation
+pydantic==2.5.3
+pydantic-settings==2.1.0
+email-validator==2.1.0
+
+# String Matching & NLP
+rapidfuzz==3.6.1
+chardet==5.2.0
+
+# ML
+scikit-learn==1.4.0
+statsmodels==0.14.1
+numpy==1.26.3
+
+# LLM Inference
+llama-cpp-python==0.2.32
+sentence-transformers==2.3.1
+
+# Vector Store
+chromadb==0.4.22
+
+# Object Storage
+minio==7.2.3
+
+# Utilities
+python-dotenv==1.0.0
+httpx==0.26.0
+tenacity==8.2.3
+structlog==24.1.0
+aiofiles==23.2.1
+
+# Testing
+pytest==7.4.4
+pytest-asyncio==0.23.3
+httpx==0.26.0

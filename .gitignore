@@ -1,0 +1,22 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+.env
+.DS_Store
+
+# Node/Frontend
+node_modules/
+dist/
+.eslintcache
+
+# Backend Uploads (Don't commit user data)
+backend/app/uploads/
+!backend/app/uploads/.gitkeep
+backend/app/chroma_db/
+backend/metrics.json
+
+# IDE
+.vscode/
+.idea/
