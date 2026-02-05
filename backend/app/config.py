@@ -24,29 +24,23 @@ class Settings(BaseSettings):
     ENV: str = "development"
     ALLOWED_ORIGINS: str = "http://localhost:5173,http://localhost:3000"
     
-    # Database
+    # Supabase Configuration
+    SUPABASE_URL: str = "https://aivlfocxshysxxcxxkae.supabase.co"
+    SUPABASE_ANON_KEY: str = ""
+    SUPABASE_SERVICE_KEY: Optional[str] = None
+    
+    # Database (Supabase PostgreSQL)
     DATABASE_URL: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/bi_platform"
     DATABASE_POOL_SIZE: int = 10
     DATABASE_MAX_OVERFLOW: int = 20
     
-    # Redis
+    # Redis (Optional)
     REDIS_URL: str = "redis://localhost:6379/0"
     
-    # Celery
-    CELERY_BROKER_URL: str = "redis://localhost:6379/1"
-    CELERY_RESULT_BACKEND: str = "redis://localhost:6379/2"
-    
-    # File Storage
+    # File Storage (Uses Supabase Storage)
     UPLOAD_DIR: str = "./uploads"
     MAX_UPLOAD_SIZE_MB: int = 100
     ALLOWED_EXTENSIONS: set = {"csv", "xls", "xlsx", "json"}
-    
-    # MinIO (Object Storage)
-    MINIO_ENDPOINT: str = "localhost:9000"
-    MINIO_ACCESS_KEY: str = "minioadmin"
-    MINIO_SECRET_KEY: str = "minioadmin"
-    MINIO_BUCKET: str = "bi-platform"
-    MINIO_SECURE: bool = False
     
     # LLM Configuration
     LLM_MODEL_PATH: str = "./models/mistral-7b-instruct-v0.2.Q4_K_M.gguf"
