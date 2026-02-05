@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: bi-intelligence-backend
+    runtime: python
+    region: oregon
+    plan: free
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.11"
+      - key: CORS_ORIGINS
+        value: https://bi-intelligence-platform.vercel.app
+      - key: GROQ_API_KEY
+        sync: false  # You'll enter this manually in Render dashboard
+    healthCheckPath: /api/health
