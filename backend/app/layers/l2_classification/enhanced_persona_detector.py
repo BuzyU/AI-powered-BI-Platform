@@ -327,6 +327,24 @@ class EnhancedPersonaDetector:
             metadata = ds.get('metadata', {})
             df = ds.get('df')
             
+            # Check if this dataset is a model file (from metadata)
+            if metadata.get('is_model') and not model_info:
+                model_type = metadata.get('model_type', '').lower()
+                cv_model_types = ['image', 'vision', 'cnn', 'resnet', 'vgg', 'yolo', 
+                                 'faster_rcnn', 'efficientnet', 'unet', 'detection']
+                is_cv_model = any(cv_type in model_type for cv_type in cv_model_types)
+                
+                if is_cv_model:
+                    scores[UserPersona.COMPUTER_VISION] += 8.0
+                    detected_categories.add(DataCategory.MODEL_FILE)
+                    detected_categories.add(DataCategory.IMAGE_CLASSIFICATION)
+                    detected_domains.add('Computer Vision')
+                else:
+                    scores[UserPersona.ML_ENGINEER] += 5.0
+                    detected_categories.add(DataCategory.MODEL_FILE)
+                    detected_domains.add('Machine Learning')
+                continue  # Skip column analysis for model files
+            
             if df is None:
                 continue
             
