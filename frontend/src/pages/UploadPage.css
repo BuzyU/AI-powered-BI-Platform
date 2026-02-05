@@ -408,14 +408,14 @@
     color: var(--text-muted);
 }
 
-/* Action Buttons */
+/* Action Buttons in dataset table (icon-only buttons) */
 .cell-actions {
     display: flex;
     align-items: center;
     gap: 0.5rem;
 }
 
-.btn-action {
+.cell-actions .btn-action {
     width: 34px;
     height: 34px;
     display: flex;
@@ -427,21 +427,23 @@
     color: var(--text-secondary);
     cursor: pointer;
     transition: all 0.15s ease;
+    padding: 0;
+    font-size: inherit;
 }
 
-.btn-action.view:hover {
+.cell-actions .btn-action.view:hover {
     background: var(--primary-50);
     border-color: var(--primary-200);
     color: var(--primary-600);
 }
 
-.btn-action.delete:hover {
+.cell-actions .btn-action.delete:hover {
     background: #fef2f2;
     border-color: #fecaca;
     color: #dc2626;
 }
 
-.btn-action:disabled {
+.cell-actions .btn-action:disabled {
     opacity: 0.5;
     cursor: not-allowed;
 }

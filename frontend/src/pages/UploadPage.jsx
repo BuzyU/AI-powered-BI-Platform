@@ -327,17 +327,22 @@ function UploadPage({ datasets, onUploadComplete, onAnalyzeStart, onAnalyzeCompl
                                             </td>
                                             <td>
                                                 <div className="detection-info">
-                                                    <span className="detected-type">{d.detected_type || 'Processing...'}</span>
-                                                    {d.confidence && (
+                                                    <span className="detected-type">
+                                                        {d.is_model 
+                                                            ? (d.model_type || d.detected_type || 'ML Model')
+                                                            : (d.detected_type || 'Processing...')
+                                                        }
+                                                    </span>
+                                                    {!d.is_model && d.confidence > 0 && (
                                                         <span className="confidence-score">{d.confidence}% confidence</span>
                                                     )}
                                                 </div>
                                             </td>
                                             <td className="cell-size">
-                                                {d.shape ? (
-                                                    <span>{d.shape.rows?.toLocaleString() || '-'} rows</span>
-                                                ) : d.is_model ? (
+                                                {d.is_model ? (
                                                     <span className="model-label">Model</span>
+                                                ) : d.shape?.rows ? (
+                                                    <span>{d.shape.rows.toLocaleString()} rows</span>
                                                 ) : (
                                                     <span>-</span>
                                                 )}

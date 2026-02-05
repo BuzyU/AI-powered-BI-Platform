@@ -306,8 +306,8 @@ async def upload_files(
                 'id': dataset_id,
                 'filename': file.filename,
                 'file_type': ext,
-                'detected_role': metadata.get('detected_role', 'Unknown'),
-                'detected_type': metadata.get('detected_type', 'Unknown'),
+                'detected_role': metadata.get('detected_role', 'Model' if metadata.get('is_model') else 'Unknown'),
+                'detected_type': metadata.get('model_type') if metadata.get('is_model') else metadata.get('detected_type', 'Unknown'),
                 'confidence': metadata.get('confidence', 0),
                 'all_roles': metadata.get('all_roles', []),
                 'content_summary': metadata.get('content_summary', ''),
@@ -315,7 +315,13 @@ async def upload_files(
                 'status': 'analyzed'
             }
             
-            if not metadata.get('is_model'):
+            if metadata.get('is_model'):
+                # Add model-specific info
+                result_entry.update({
+                    'model_type': metadata.get('model_type', 'Unknown Model'),
+                    'model_info': metadata.get('model_info', {}),
+                })
+            else:
                 result_entry.update({
                     'shape': profile.get('shape'),
                     'qa_score': profile.get('overall_quality', 0),

@@ -473,9 +473,11 @@
 .prompt-actions {
   display: flex;
   gap: 1rem;
+  flex-wrap: wrap;
+  justify-content: center;
 }
 
-.btn-action {
+.prompt-actions .btn-action {
   padding: 0.75rem 1.5rem;
   background: #3b82f6;
   color: white;
@@ -485,9 +487,13 @@
   font-size: 1rem;
   font-weight: 500;
   transition: all 0.2s;
+  white-space: nowrap;
+  min-width: fit-content;
+  width: auto;
+  height: auto;
 }
 
-.btn-action:hover {
+.prompt-actions .btn-action:hover {
   background: #2563eb;
   transform: translateY(-2px);
   box-shadow: var(--shadow-lg);
