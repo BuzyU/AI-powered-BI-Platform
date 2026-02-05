@@ -6,10 +6,11 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-# Supabase credentials - MUST be set via environment variables
-SUPABASE_URL = os.getenv("SUPABASE_URL")
-SUPABASE_ANON_KEY = os.getenv("SUPABASE_ANON_KEY")
-SUPABASE_SERVICE_KEY = os.getenv("SUPABASE_SERVICE_KEY", "")
+# Supabase credentials - loaded from settings (which reads .env)
+# Fall back to os.getenv for container environments where env vars are set directly
+SUPABASE_URL = settings.SUPABASE_URL or os.getenv("SUPABASE_URL")
+SUPABASE_ANON_KEY = settings.SUPABASE_ANON_KEY or os.getenv("SUPABASE_ANON_KEY")
+SUPABASE_SERVICE_KEY = settings.SUPABASE_SERVICE_KEY or os.getenv("SUPABASE_SERVICE_KEY", "")
 
 # Validate required credentials
 if not SUPABASE_URL or not SUPABASE_ANON_KEY:
