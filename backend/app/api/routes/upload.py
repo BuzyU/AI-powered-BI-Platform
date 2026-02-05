@@ -388,6 +388,14 @@ async def apply_cleaning(
 class AnalyzeRequest(BaseModel):
     filters: Optional[Dict[str, Any]] = None
 
+@router.get("/analysis")
+async def get_analysis(x_session_id: str = Header("default_session")):
+    """Get cached analysis for session."""
+    analysis = state.get_analysis(x_session_id)
+    if analysis:
+        return analysis
+    return {"status": "no_analysis", "message": "No analysis available. Run /analyze first."}
+
 @router.post("/analyze")
 async def run_analysis(
     request: AnalyzeRequest = None,
