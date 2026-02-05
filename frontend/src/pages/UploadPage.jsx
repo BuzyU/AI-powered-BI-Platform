@@ -43,13 +43,13 @@ function UploadPage({ datasets, onUploadComplete, onAnalyzeStart, onAnalyzeCompl
         try {
             // Ensure we have a session before uploading
             const currentSession = await ensureSession()
-            
+
             if (!currentSession) {
                 throw new Error("Failed to create session")
             }
-            
+
             console.log('Uploading with session:', currentSession)
-            
+
             const res = await fetch(`${API_BASE}/upload`, {
                 method: 'POST',
                 headers: {
@@ -65,7 +65,21 @@ function UploadPage({ datasets, onUploadComplete, onAnalyzeStart, onAnalyzeCompl
 
             const data = await res.json()
             console.log('Upload response:', data)
-            onUploadComplete([...datasets, ...data.datasets])
+
+            // Check for individual file errors
+            const errors = data.datasets.filter(d => d.status === 'error')
+            const successful = data.datasets.filter(d => d.status !== 'error')
+
+            if (errors.length > 0) {
+                const errorMsg = errors.map(e => `${e.filename}: ${e.error}`).join('\n')
+                setError(errorMsg)
+                // Only add successful files
+                if (successful.length > 0) {
+                    onUploadComplete([...datasets, ...successful])
+                }
+            } else {
+                onUploadComplete([...datasets, ...data.datasets])
+            }
         } catch (err) {
             console.error('Upload error:', err)
             setError(err.message)
@@ -99,7 +113,7 @@ function UploadPage({ datasets, onUploadComplete, onAnalyzeStart, onAnalyzeCompl
     const handleDelete = async (datasetId, e) => {
         e.stopPropagation()
         if (deletingId) return
-        
+
         setDeletingId(datasetId)
         try {
             const res = await fetch(`${API_BASE}/datasets/${datasetId}`, {
@@ -132,70 +146,70 @@ function UploadPage({ datasets, onUploadComplete, onAnalyzeStart, onAnalyzeCompl
         if (isModel) {
             return (
                 <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <circle cx="12" cy="12" r="3"/>
-                    <path d="M12 2v4"/>
-                    <path d="M12 18v4"/>
-                    <path d="m4.93 4.93 2.83 2.83"/>
-                    <path d="m16.24 16.24 2.83 2.83"/>
-                    <path d="M2 12h4"/>
-                    <path d="M18 12h4"/>
-                    <path d="m4.93 19.07 2.83-2.83"/>
-                    <path d="m16.24 7.76 2.83-2.83"/>
+                    <circle cx="12" cy="12" r="3" />
+                    <path d="M12 2v4" />
+                    <path d="M12 18v4" />
+                    <path d="m4.93 4.93 2.83 2.83" />
+                    <path d="m16.24 16.24 2.83 2.83" />
+                    <path d="M2 12h4" />
+                    <path d="M18 12h4" />
+                    <path d="m4.93 19.07 2.83-2.83" />
+                    <path d="m16.24 7.76 2.83-2.83" />
                 </svg>
             )
         }
-        
+
         const type = fileType?.toLowerCase()
         if (type === 'csv') {
             return (
                 <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-                    <polyline points="14,2 14,8 20,8"/>
-                    <line x1="8" y1="13" x2="16" y2="13"/>
-                    <line x1="8" y1="17" x2="16" y2="17"/>
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                    <polyline points="14,2 14,8 20,8" />
+                    <line x1="8" y1="13" x2="16" y2="13" />
+                    <line x1="8" y1="17" x2="16" y2="17" />
                 </svg>
             )
         }
         if (type === 'xlsx' || type === 'xls') {
             return (
                 <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <rect x="3" y="3" width="18" height="18" rx="2"/>
-                    <line x1="3" y1="9" x2="21" y2="9"/>
-                    <line x1="3" y1="15" x2="21" y2="15"/>
-                    <line x1="9" y1="3" x2="9" y2="21"/>
-                    <line x1="15" y1="3" x2="15" y2="21"/>
+                    <rect x="3" y="3" width="18" height="18" rx="2" />
+                    <line x1="3" y1="9" x2="21" y2="9" />
+                    <line x1="3" y1="15" x2="21" y2="15" />
+                    <line x1="9" y1="3" x2="9" y2="21" />
+                    <line x1="15" y1="3" x2="15" y2="21" />
                 </svg>
             )
         }
         if (type === 'json') {
             return (
                 <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-                    <polyline points="14,2 14,8 20,8"/>
-                    <path d="M8 13h2"/>
-                    <path d="M8 17h2"/>
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                    <polyline points="14,2 14,8 20,8" />
+                    <path d="M8 13h2" />
+                    <path d="M8 17h2" />
                 </svg>
             )
         }
         if (type === 'pkl' || type === 'pt' || type === 'onnx') {
             return (
                 <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <circle cx="12" cy="12" r="3"/>
-                    <path d="M12 2v4"/>
-                    <path d="M12 18v4"/>
-                    <path d="m4.93 4.93 2.83 2.83"/>
-                    <path d="m16.24 16.24 2.83 2.83"/>
-                    <path d="M2 12h4"/>
-                    <path d="M18 12h4"/>
-                    <path d="m4.93 19.07 2.83-2.83"/>
-                    <path d="m16.24 7.76 2.83-2.83"/>
+                    <circle cx="12" cy="12" r="3" />
+                    <path d="M12 2v4" />
+                    <path d="M12 18v4" />
+                    <path d="m4.93 4.93 2.83 2.83" />
+                    <path d="m16.24 16.24 2.83 2.83" />
+                    <path d="M2 12h4" />
+                    <path d="M18 12h4" />
+                    <path d="m4.93 19.07 2.83-2.83" />
+                    <path d="m16.24 7.76 2.83-2.83" />
                 </svg>
             )
         }
         return (
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-                <polyline points="14,2 14,8 20,8"/>
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                <polyline points="14,2 14,8 20,8" />
             </svg>
         )
     }
@@ -234,9 +248,9 @@ function UploadPage({ datasets, onUploadComplete, onAnalyzeStart, onAnalyzeCompl
                     <label htmlFor="file-upload" className="dropzone-content">
                         <div className="dropzone-icon">
                             <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-                                <polyline points="17,8 12,3 7,8"/>
-                                <line x1="12" y1="3" x2="12" y2="15"/>
+                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                                <polyline points="17,8 12,3 7,8" />
+                                <line x1="12" y1="3" x2="12" y2="15" />
                             </svg>
                         </div>
                         <div className="dropzone-text">
@@ -251,15 +265,15 @@ function UploadPage({ datasets, onUploadComplete, onAnalyzeStart, onAnalyzeCompl
             {error && (
                 <div className="error-alert">
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                        <circle cx="12" cy="12" r="10"/>
-                        <line x1="12" y1="8" x2="12" y2="12"/>
-                        <line x1="12" y1="16" x2="12.01" y2="16"/>
+                        <circle cx="12" cy="12" r="10" />
+                        <line x1="12" y1="8" x2="12" y2="12" />
+                        <line x1="12" y1="16" x2="12.01" y2="16" />
                     </svg>
                     <span>{error}</span>
                     <button onClick={() => setError(null)} className="error-close">
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                            <line x1="18" y1="6" x2="6" y2="18"/>
-                            <line x1="6" y1="6" x2="18" y2="18"/>
+                            <line x1="18" y1="6" x2="6" y2="18" />
+                            <line x1="6" y1="6" x2="18" y2="18" />
                         </svg>
                     </button>
                 </div>
@@ -286,7 +300,7 @@ function UploadPage({ datasets, onUploadComplete, onAnalyzeStart, onAnalyzeCompl
                             ) : (
                                 <>
                                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                        <polygon points="5,3 19,12 5,21"/>
+                                        <polygon points="5,3 19,12 5,21" />
                                     </svg>
                                     Run Analysis
                                 </>
@@ -328,7 +342,7 @@ function UploadPage({ datasets, onUploadComplete, onAnalyzeStart, onAnalyzeCompl
                                             <td>
                                                 <div className="detection-info">
                                                     <span className="detected-type">
-                                                        {d.is_model 
+                                                        {d.is_model
                                                             ? (d.model_type || d.detected_type || 'ML Model')
                                                             : (d.detected_type || 'Processing...')
                                                         }
@@ -351,8 +365,8 @@ function UploadPage({ datasets, onUploadComplete, onAnalyzeStart, onAnalyzeCompl
                                                 {!d.is_model && d.qa_score !== undefined ? (
                                                     <div className={`quality-indicator ${quality.class}`}>
                                                         <div className="quality-bar">
-                                                            <div 
-                                                                className="quality-fill" 
+                                                            <div
+                                                                className="quality-fill"
                                                                 style={{ width: `${d.qa_score}%` }}
                                                             ></div>
                                                         </div>
@@ -363,29 +377,29 @@ function UploadPage({ datasets, onUploadComplete, onAnalyzeStart, onAnalyzeCompl
                                                 )}
                                             </td>
                                             <td className="cell-actions">
-                                                <button 
+                                                <button
                                                     className="btn-action view"
                                                     onClick={() => onViewProfile(d.id)}
                                                     title={d.is_model ? "View Model" : "View Profile"}
                                                 >
                                                     {d.is_model ? (
                                                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                                            <circle cx="12" cy="12" r="3"/>
-                                                            <path d="M12 2v4"/>
-                                                            <path d="M12 18v4"/>
-                                                            <path d="m4.93 4.93 2.83 2.83"/>
-                                                            <path d="m16.24 16.24 2.83 2.83"/>
-                                                            <path d="M2 12h4"/>
-                                                            <path d="M18 12h4"/>
+                                                            <circle cx="12" cy="12" r="3" />
+                                                            <path d="M12 2v4" />
+                                                            <path d="M12 18v4" />
+                                                            <path d="m4.93 4.93 2.83 2.83" />
+                                                            <path d="m16.24 16.24 2.83 2.83" />
+                                                            <path d="M2 12h4" />
+                                                            <path d="M18 12h4" />
                                                         </svg>
                                                     ) : (
                                                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                                            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
-                                                            <circle cx="12" cy="12" r="3"/>
+                                                            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                                                            <circle cx="12" cy="12" r="3" />
                                                         </svg>
                                                     )}
                                                 </button>
-                                                <button 
+                                                <button
                                                     className="btn-action delete"
                                                     onClick={(e) => handleDelete(d.id, e)}
                                                     disabled={deletingId === d.id}
@@ -395,10 +409,10 @@ function UploadPage({ datasets, onUploadComplete, onAnalyzeStart, onAnalyzeCompl
                                                         <div className="mini-spinner"></div>
                                                     ) : (
                                                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                                            <polyline points="3,6 5,6 21,6"/>
-                                                            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
-                                                            <line x1="10" y1="11" x2="10" y2="17"/>
-                                                            <line x1="14" y1="11" x2="14" y2="17"/>
+                                                            <polyline points="3,6 5,6 21,6" />
+                                                            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                                                            <line x1="10" y1="11" x2="10" y2="17" />
+                                                            <line x1="14" y1="11" x2="14" y2="17" />
                                                         </svg>
                                                     )}
                                                 </button>
@@ -417,10 +431,10 @@ function UploadPage({ datasets, onUploadComplete, onAnalyzeStart, onAnalyzeCompl
                 <div className="empty-state">
                     <div className="empty-icon">
                         <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1">
-                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-                            <polyline points="14,2 14,8 20,8"/>
-                            <line x1="12" y1="18" x2="12" y2="12"/>
-                            <line x1="9" y1="15" x2="15" y2="15"/>
+                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                            <polyline points="14,2 14,8 20,8" />
+                            <line x1="12" y1="18" x2="12" y2="12" />
+                            <line x1="9" y1="15" x2="15" y2="15" />
                         </svg>
                     </div>
                     <h3>No files uploaded yet</h3>
