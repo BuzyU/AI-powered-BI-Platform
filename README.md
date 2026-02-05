@@ -2,7 +2,7 @@
 
 An intelligent, full-stack Business Intelligence platform that transforms raw data into actionable insights using AI and **adaptive dashboards** that completely change based on WHO is using it.
 
-## 🚀 Key Features
+## Key Features
 
 ### 1. **🎯 Adaptive Dashboards**
    - **Business Users** → Revenue KPIs, Sales Trends, Customer Insights (Power BI style)
@@ -30,7 +30,7 @@ An intelligent, full-stack Business Intelligence platform that transforms raw da
    - **Session Persistence**: Resume work from where you left off
    - **Easy Switching**: Switch between multiple analysis projects
 
-## 🛠️ Tech Stack
+## Tech Stack
 
 - **Frontend**: React 19 (Vite), Recharts, CSS3
 - **Backend**: FastAPI (Python), Uvicorn
