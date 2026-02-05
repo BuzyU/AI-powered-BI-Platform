@@ -362,6 +362,19 @@ async def get_profile(dataset_id: str, x_session_id: str = Header("default_sessi
     if not profile: raise HTTPException(404, "Profile not found")
     return profile
 
+@router.post("/datasets/{dataset_id}/clean/preview")
+async def preview_cleaning(
+    dataset_id: str,
+    operations: List[Dict[str, Any]] = Body(...),
+    x_session_id: str = Header("default_session")
+):
+    """Preview cleaning operations without applying them."""
+    df = state.get_dataset_df(x_session_id, dataset_id)
+    if df is None: raise HTTPException(404, "Dataset not found")
+    
+    preview = cleaner.preview_cleaning(df, operations)
+    return preview
+
 @router.post("/datasets/{dataset_id}/clean/apply")
 async def apply_cleaning(
     dataset_id: str, 

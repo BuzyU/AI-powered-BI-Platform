@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { useSession } from '../contexts/SessionContext'
 import '../styles/ProfilePage.css'
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000/api'
@@ -9,25 +10,71 @@ const formatNumber = (num) => {
 }
 
 function ProfilePage({ dataset, onBack, onProfileUpdate, onContinue }) {
+    const { sessionId } = useSession()
     const [activeTab, setActiveTab] = useState('overview')
     const [cleaningPreview, setCleaningPreview] = useState(null)
     const [pendingOperations, setPendingOperations] = useState([])
     const [applying, setApplying] = useState(false)
-    const [profile, setProfile] = useState(dataset.profile)
+    const [profile, setProfile] = useState(null)
+    const [loading, setLoading] = useState(true)
     const [editedFormula, setEditedFormula] = useState(null)
     const [error, setError] = useState(null)
 
+    // Fetch profile data on mount
     useEffect(() => {
-        if (dataset.profile) {
-            setProfile(dataset.profile)
+        const fetchProfile = async () => {
+            if (!dataset?.id || !sessionId) return
+            
+            setLoading(true)
+            setError(null)
+            
+            try {
+                const res = await fetch(`${API_BASE}/datasets/${dataset.id}/profile`, {
+                    headers: { 'x-session-id': sessionId }
+                })
+                
+                if (!res.ok) {
+                    throw new Error('Failed to load profile')
+                }
+                
+                const data = await res.json()
+                setProfile(data)
+            } catch (err) {
+                console.error('Profile fetch error:', err)
+                setError(err.message)
+            } finally {
+                setLoading(false)
+            }
         }
-    }, [dataset.profile])
+        
+        fetchProfile()
+    }, [dataset?.id, sessionId])
+
+    if (loading) return (
+        <div className="profile-page">
+            <header className="page-header">
+                <button onClick={onBack} className="btn-secondary" style={{ marginBottom: '1rem' }}>← Back</button>
+                <h1>Loading Dataset Profile...</h1>
+                <div className="loading-spinner" style={{ margin: '2rem auto' }}></div>
+            </header>
+        </div>
+    )
+
+    if (error) return (
+        <div className="profile-page">
+            <header className="page-header">
+                <button onClick={onBack} className="btn-secondary" style={{ marginBottom: '1rem' }}>← Back</button>
+                <h1>Error Loading Profile</h1>
+                <p style={{ color: '#ef4444' }}>{error}</p>
+            </header>
+        </div>
+    )
 
     if (!profile) return (
         <div className="profile-page">
             <header className="page-header">
                 <button onClick={onBack} className="btn-secondary" style={{ marginBottom: '1rem' }}>← Back</button>
-                <h1>Loading Dataset Profile...</h1>
+                <h1>No Profile Data Available</h1>
             </header>
         </div>
     )
@@ -49,7 +96,10 @@ function ProfilePage({ dataset, onBack, onProfileUpdate, onContinue }) {
         try {
             const res = await fetch(`${API_BASE}/datasets/${dataset.id}/clean/preview`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 
+                    'Content-Type': 'application/json',
+                    'x-session-id': sessionId
+                },
                 body: JSON.stringify([newOperation])
             })
             const preview = await res.json()
@@ -75,7 +125,10 @@ function ProfilePage({ dataset, onBack, onProfileUpdate, onContinue }) {
         try {
             const res = await fetch(`${API_BASE}/datasets/${dataset.id}/clean/preview`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 
+                    'Content-Type': 'application/json',
+                    'x-session-id': sessionId
+                },
                 body: JSON.stringify([operation])
             })
             const preview = await res.json()
@@ -98,14 +151,19 @@ function ProfilePage({ dataset, onBack, onProfileUpdate, onContinue }) {
         try {
             const res = await fetch(`${API_BASE}/datasets/${dataset.id}/clean/apply`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 
+                    'Content-Type': 'application/json',
+                    'x-session-id': sessionId
+                },
                 body: JSON.stringify([cleaningPreview.operation])
             })
 
             const result = await res.json()
             if (result.success) {
                 // Update local profile
-                const newProfile = await fetch(`${API_BASE}/datasets/${dataset.id}/profile`).then(r => r.json())
+                const newProfile = await fetch(`${API_BASE}/datasets/${dataset.id}/profile`, {
+                    headers: { 'x-session-id': sessionId }
+                }).then(r => r.json())
                 setProfile(newProfile)
                 onProfileUpdate(dataset.id, newProfile)
                 setCleaningPreview(null)

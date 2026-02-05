@@ -1,9 +1,11 @@
 import { useState, useRef, useEffect } from 'react'
+import { useSession } from '../contexts/SessionContext'
 import './ChatPage.css'
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000/api'
 
 function ChatPage({ analysisData }) {
+    const { sessionId } = useSession()
     const [messages, setMessages] = useState([
         {
             type: 'system',
@@ -64,7 +66,10 @@ function ChatPage({ analysisData }) {
             // Try API first
             const response = await fetch(`${API_BASE}/ask`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 
+                    'Content-Type': 'application/json',
+                    'x-session-id': sessionId
+                },
                 body: JSON.stringify({ question: userMessage })
             })
 

@@ -46,7 +46,7 @@ const PersonaDescriptions = {
 }
 
 export default function AdaptiveDashboard() {
-  const { currentSession } = useSession()
+  const { sessionId } = useSession()
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [dashboard, setDashboard] = useState(null)
@@ -57,18 +57,30 @@ export default function AdaptiveDashboard() {
 
   // Fetch dashboard configuration
   const fetchDashboard = useCallback(async () => {
-    if (!currentSession) return
+    if (!sessionId) return
     
     setLoading(true)
     setError(null)
     
     try {
+      const controller = new AbortController()
+      const timeoutId = setTimeout(() => controller.abort(), 30000) // 30 second timeout
+      
       const response = await fetch(`${API_BASE}/session-dashboard`, {
-        headers: { 'X-Session-Id': currentSession }
+        headers: { 'X-Session-Id': sessionId },
+        signal: controller.signal
       })
+      
+      clearTimeout(timeoutId)
       
       if (!response.ok) {
         const errData = await response.json().catch(() => ({}))
+        // Handle no data case gracefully
+        if (response.status === 400) {
+          setLoading(false)
+          setDashboard(null)
+          return
+        }
         throw new Error(errData.detail || 'Failed to load dashboard')
       }
       
@@ -81,21 +93,25 @@ export default function AdaptiveDashboard() {
       }
     } catch (err) {
       console.error('Dashboard fetch error:', err)
-      setError(err.message)
+      if (err.name === 'AbortError') {
+        setError('Dashboard loading timed out. The server may be slow. Please try again.')
+      } else {
+        setError(err.message)
+      }
     } finally {
       setLoading(false)
     }
-  }, [currentSession])
+  }, [sessionId])
 
   // Fetch data for active tab
   const fetchTabData = useCallback(async (tabId) => {
-    if (!currentSession || !tabId || tabData[tabId]) return
+    if (!sessionId || !tabId || tabData[tabId]) return
     
     setLoadingTab(true)
     
     try {
       const response = await fetch(`${API_BASE}/session-dashboard/tabs/${tabId}`, {
-        headers: { 'X-Session-Id': currentSession }
+        headers: { 'X-Session-Id': sessionId }
       })
       
       if (!response.ok) throw new Error('Failed to load tab data')
@@ -107,7 +123,7 @@ export default function AdaptiveDashboard() {
     } finally {
       setLoadingTab(false)
     }
-  }, [currentSession, tabData])
+  }, [sessionId, tabData])
 
   useEffect(() => {
     fetchDashboard()
@@ -127,7 +143,7 @@ export default function AdaptiveDashboard() {
     try {
       const response = await fetch(`${API_BASE}/session-dashboard/regenerate`, {
         method: 'POST',
-        headers: { 'X-Session-Id': currentSession }
+        headers: { 'X-Session-Id': sessionId }
       })
       
       if (!response.ok) throw new Error('Failed to regenerate')
