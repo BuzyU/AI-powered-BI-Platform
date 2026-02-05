@@ -1,51 +1,70 @@
 # AI-Powered BI Platform
 
-An intelligent, full-stack Business Intelligence platform that transforms raw data into actionable insights using AI and dynamic visualization tools.
+An intelligent, full-stack Business Intelligence platform that transforms raw data into actionable insights using AI and **adaptive dashboards** that completely change based on WHO is using it.
 
 ## 🚀 Key Features
 
-### 1. **Automated Data Engineering**
+### 1. **🎯 Adaptive Dashboards**
+   - **Business Users** → Revenue KPIs, Sales Trends, Customer Insights (Power BI style)
+   - **Analytics Users** → Statistical Distributions, Correlations, Histograms (Jupyter style)
+   - **ML Engineers** → Model Metrics, Confusion Matrix, Feature Importance (MLflow style)
+   - **Auto-Detection**: System automatically detects your persona from uploaded data
+
+### 2. **Automated Data Engineering**
    - **Smart Profiling**: Automatically detects schema, missing values, duplicates, and outliers.
    - **One-Click Cleaning**: Apply recommended fixes (fill missing, drop duplicates) or write custom cleaning formulas.
    - **Quality Scoring**: Instant data quality assessment with detailed health reports.
 
-### 2. **AI-Driven Analytics**
+### 3. **AI-Driven Analytics**
    - **Executive Summaries**: Uses **Groq AI (Llama 3)** to generate natural language summaries of your dataset.
    - **Conversational Q&A**: Chat with your data! Ask questions like "What is the trend of sales over time?" and get AI-generated answers based on statistical analysis.
    - **Context-Aware Insights**: Automatically identifies anomalies, trends, and key relationships.
 
-### 3. **Dynamic Dashboard**
+### 4. **Dynamic Dashboard**
    - **Auto-Generated Visualizations**: Instantly creates Bar, Line, Area, and Donut charts based on column types.
    - **Interactive KPIs**: Key metrics are automatically calculated and displayed.
    - **Global Filtering**: Filter all charts and metrics by Category or Date ranges.
 
-### 4. **Advanced Visualization Tools**
-   - **Custom Chart Builder**: Drag-and-drop interface to create your own charts (Bar, Line, Scatter, etc.) with support for aggregations (Sum, Mean, Count) and automatic binning for large datasets.
-   - **Python Plotter**: **[New]** A built-in code editor to execute custom Python code (using `matplotlib` and `seaborn`) directly in the browser for complex, publication-ready visualizations.
+### 5. **Multi-Session Support**
+   - **Isolated Sessions**: Each analysis session is completely isolated
+   - **Session Persistence**: Resume work from where you left off
+   - **Easy Switching**: Switch between multiple analysis projects
 
 ## 🛠️ Tech Stack
 
-- **Frontend**: React.js (Vite), CSS3 (Custom Dashboard Design)
+- **Frontend**: React 19 (Vite), Recharts, CSS3
 - **Backend**: FastAPI (Python), Uvicorn
-- **Data Processing**: Pandas, NumPy
+- **Data Processing**: Pandas, NumPy, Scikit-learn
 - **AI/LLM**: Groq API (Llama 3 70B)
-- **Storage**: Local filesystem (Managed Uploads)
+- **Storage**: Local filesystem with session persistence
 
-## 📦 Installation & Setup
+## 📦 Quick Start
 
 ### Prerequisites
-- Python 3.9+
-- Node.js 16+
+- Python 3.10+
+- Node.js 18+
 - Groq API Key
 
-### 1. Backend Setup
+### One-Command Setup
+```bash
+# Install all dependencies
+npm run install:all
+
+# Start both frontend and backend
+npm run dev
+```
+
+This starts:
+- **Frontend**: http://localhost:5173
+- **Backend**: http://localhost:8000
+
+### Manual Setup
+
+#### Backend
 ```bash
 cd backend
-# Create virtual environment (optional)
 python -m venv venv
 source venv/bin/activate  # or venv\Scripts\activate on Windows
-
-# Install dependencies
 pip install -r requirements.txt
 
 # Run Server

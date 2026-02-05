@@ -1,133 +1,137 @@
-import { useState, useEffect } from 'react'
-import './App.css'
+import { useState, useEffect, useCallback } from 'react'
+import { SessionProvider, useSession } from './contexts/SessionContext'
 import Sidebar from './components/Sidebar'
+import './App.css'
+
+// Pages
 import UploadPage from './pages/UploadPage'
+import AdaptiveDashboard from './pages/AdaptiveDashboard'
 import ProfilePage from './pages/ProfilePage'
-import DashboardPage from './pages/DashboardPage'
 import ChatPage from './pages/ChatPage'
 
-const API_BASE = 'http://localhost:8000/api'
+const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000/api'
 
 function App() {
-  const [currentPage, setCurrentPage] = useState('upload')
-  const [datasets, setDatasets] = useState([])
-  const [profiles, setProfiles] = useState([])
-  const [selectedDataset, setSelectedDataset] = useState(null)
-  const [analysisComplete, setAnalysisComplete] = useState(false)
-  const [analysisData, setAnalysisData] = useState(null)
+  return (
+    <SessionProvider>
+      <MainApp />
+    </SessionProvider>
+  )
+}
 
+function MainApp() {
+  const { sessionId, fetchSessions } = useSession();
+
+  const [datasets, setDatasets] = useState([])
+  const [activePage, setActivePage] = useState('upload')
+  const [analysisData, setAnalysisData] = useState(null)
+  const [selectedDataset, setSelectedDataset] = useState(null)
+
+  // Fetch initial data when session is ready
   useEffect(() => {
-    fetchDatasets()
-  }, [])
+    if (sessionId) {
+      fetchDatasets();
+      fetchAnalysis();
+    }
+  }, [sessionId]);
 
   const fetchDatasets = async () => {
+    if (!sessionId) return;
     try {
-      const response = await fetch(`${API_BASE}/datasets`)
-      if (response.ok) {
-        const data = await response.json()
-        setDatasets(data.datasets || [])
-      }
-    } catch (error) {
-      console.log('Backend not available')
+      const res = await fetch(`${API_BASE}/datasets`, {
+        headers: { 'x-session-id': sessionId }
+      })
+      const data = await res.json()
+      if (data.datasets) setDatasets(data.datasets)
+    } catch (err) {
+      console.error("Failed to load datasets", err)
     }
   }
 
-  const handleDatasetUpload = (uploadedDatasets) => {
-    setDatasets(prev => [...prev, ...uploadedDatasets])
+  const fetchAnalysis = async () => {
+    if (!sessionId) return;
+    try {
+      const res = await fetch(`${API_BASE}/analysis`, {
+        headers: { 'x-session-id': sessionId }
+      })
+      if (res.ok) {
+        const data = await res.json()
+        setAnalysisData(data)
+      }
+    } catch (err) { }
   }
 
-  const handleSelectDataset = async (dataset) => {
+  const handleUploadComplete = (newDatasets) => {
+    setDatasets(newDatasets)
+    fetchDatasets()
+    // Refresh sessions list to update counts
+    fetchSessions()
+  }
+
+  const handleDeleteDataset = (datasetId) => {
+    setDatasets(prev => prev.filter(d => d.id !== datasetId))
+    fetchSessions()
+  }
+
+  const handleAnalysisComplete = (data) => {
+    setAnalysisData(data)
+    setActivePage('dashboard')
+    fetchSessions()
+  }
+
+  const handleViewProfile = (datasetId) => {
+    const dataset = datasets.find(d => d.id === datasetId)
     setSelectedDataset(dataset)
-    setCurrentPage('profile')
-
-    // Fetch full profile in background
-    try {
-      const response = await fetch(`${API_BASE}/datasets/${dataset.id}/profile`)
-      if (response.ok) {
-        const profile = await response.json()
-        setSelectedDataset(prev => ({ ...prev, profile }))
-      }
-    } catch (error) {
-      console.error('Failed to fetch profile')
-    }
+    setActivePage('profile')
   }
 
-  const handleAnalysisComplete = async (analysis) => {
-    setAnalysisData(analysis)
-    setAnalysisComplete(true)
-    setCurrentPage('dashboard')
-  }
-
-  const handleProfileUpdate = (datasetId, newProfile) => {
-    // Update profiles
-    setProfiles(prev => prev.map(p =>
-      p.dataset_name === newProfile.dataset_name ? newProfile : p
-    ))
-
-    // Update selected dataset
-    if (selectedDataset?.id === datasetId) {
-      setSelectedDataset(prev => ({ ...prev, profile: newProfile }))
-    }
-  }
-
-  const handleDeleteDataset = async (datasetId) => {
-    try {
-      const response = await fetch(`${API_BASE}/datasets/${datasetId}`, { method: 'DELETE' })
-      if (response.ok) {
-        setDatasets(prev => prev.filter(d => d.id !== datasetId))
-        if (selectedDataset?.id === datasetId) {
-          setSelectedDataset(null)
-        }
-      }
-    } catch (error) {
-      console.error('Delete failed', error)
-    }
+  const handleNavigate = (page) => {
+    setActivePage(page)
   }
 
   const renderPage = () => {
-    switch (currentPage) {
+    switch (activePage) {
       case 'upload':
         return (
           <UploadPage
-            onUpload={handleDatasetUpload}
             datasets={datasets}
-            onSelectDataset={handleSelectDataset}
-            onDelete={handleDeleteDataset}
-            onAnalysisComplete={handleAnalysisComplete}
+            onUploadComplete={handleUploadComplete}
+            onDeleteDataset={handleDeleteDataset}
+            onAnalyzeStart={() => { }}
+            onAnalyzeComplete={handleAnalysisComplete}
+            onViewProfile={handleViewProfile}
           />
         )
       case 'profile':
         return (
           <ProfilePage
             dataset={selectedDataset}
-            onBack={() => setCurrentPage('upload')}
-            onProfileUpdate={handleProfileUpdate}
-            onContinue={() => setCurrentPage('upload')}
+            onBack={() => setActivePage('upload')}
+            onProfileUpdate={(id, p) => fetchDatasets()}
+            onContinue={() => setActivePage('dashboard')}
           />
         )
       case 'dashboard':
-        return <DashboardPage analysisData={analysisData} />
+        return (
+          <AdaptiveDashboard />
+        )
       case 'chat':
-        return <ChatPage analysisData={analysisData} />
+        return <ChatPage />
       default:
         return <UploadPage />
     }
   }
 
-  const navItems = [
-    { id: 'upload', label: 'Upload & Profile', icon: 'upload' },
-    { id: 'dashboard', label: 'Dashboard', icon: 'chart', disabled: !analysisComplete },
-    { id: 'chat', label: 'Ask AI', icon: 'chat', disabled: !analysisComplete },
-  ]
-
   return (
-    <div className="app">
-      <Sidebar
-        currentPage={currentPage}
-        onNavigate={setCurrentPage}
-        analysisComplete={analysisComplete}
-        navItems={navItems}
+    <div className="app-container">
+      {/* Sidebar with Sessions */}
+      <Sidebar 
+        currentPage={activePage}
+        onNavigate={handleNavigate}
+        analysisComplete={!!analysisData}
       />
+
+      {/* Main Content */}
       <main className="main-content">
         {renderPage()}
       </main>

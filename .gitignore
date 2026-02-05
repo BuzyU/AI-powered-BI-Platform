@@ -4,6 +4,9 @@ __pycache__/
 *$py.class
 venv/
 .env
+.env.local
+.env.*.local
+!.env.example
 .DS_Store
 
 # Node/Frontend
@@ -12,11 +15,35 @@ dist/
 .eslintcache
 
 # Backend Uploads (Don't commit user data)
-backend/app/uploads/
-!backend/app/uploads/.gitkeep
+backend/uploads/
+!backend/uploads/.gitkeep
 backend/app/chroma_db/
 backend/metrics.json
+
+# Brain storage (session data - preserve on cleanup)
+backend/brain_storage/*
+!backend/brain_storage/.gitkeep
 
 # IDE
 .vscode/
 .idea/
+*.swp
+*.swo
+
+# Logs
+*.log
+npm-debug.log*
+logs/
+
+# Vercel
+.vercel
+
+# Testing
+.coverage
+htmlcov/
+.pytest_cache/
+
+# Temporary
+*.tmp
+*.temp
+.cache/

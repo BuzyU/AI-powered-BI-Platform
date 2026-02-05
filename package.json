@@ -1,0 +1,30 @@
+{
+  "name": "bi-intelligence-platform",
+  "version": "1.0.0",
+  "private": true,
+  "description": "AI-Powered Business Intelligence Platform with Adaptive Dashboards",
+  "scripts": {
+    "dev": "concurrently -n \"backend,frontend\" -c \"blue,green\" \"npm run backend\" \"npm run frontend\"",
+    "frontend": "cd frontend && npm run dev",
+    "backend": "cd backend && python -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000",
+    "build": "cd frontend && npm run build",
+    "install:all": "cd frontend && npm install && cd ../backend && pip install -r requirements.txt",
+    "start": "npm run dev",
+    "clean": "cd frontend && rm -rf node_modules dist && cd ../backend && rm -rf __pycache__ .pytest_cache"
+  },
+  "devDependencies": {
+    "concurrently": "^9.0.1"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "python": ">=3.10.0"
+  },
+  "keywords": [
+    "business-intelligence",
+    "data-analytics",
+    "machine-learning",
+    "dashboard",
+    "fastapi",
+    "react"
+  ]
+}

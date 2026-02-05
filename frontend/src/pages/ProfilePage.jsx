@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import '../styles/ProfilePage.css'
 
-const API_BASE = 'http://localhost:8000/api'
+const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000/api'
 
 // Helper for formatting large numbers
 const formatNumber = (num) => {
@@ -279,8 +279,6 @@ function ProfilePage({ dataset, onBack, onProfileUpdate, onContinue }) {
                 )}
             </div>
 
-
-
             <div className="cleaning-preview-area">
                 {error && (
                     <div className="error-alert" style={{
@@ -345,8 +343,12 @@ function ProfilePage({ dataset, onBack, onProfileUpdate, onContinue }) {
                                 className="btn-apply"
                                 onClick={applyClean}
                                 disabled={applying}
+                                style={{
+                                    backgroundColor: applying ? '#93c5fd' : '#10b981',
+                                    cursor: applying ? 'not-allowed' : 'pointer'
+                                }}
                             >
-                                {applying ? "Applying..." : "Apply Transformation"}
+                                {applying ? "Applying..." : "✅ Apply Transformation"}
                             </button>
                         </div>
                     </div>

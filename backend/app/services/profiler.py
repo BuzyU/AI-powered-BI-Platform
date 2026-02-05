@@ -113,9 +113,18 @@ class DataProfiler:
                 }
                 
                 # Skewness and Kurtosis
+                skew_val = float(stats.skew(numeric_series))
+                kurt_val = float(stats.kurtosis(numeric_series))
+                
+                # Handle NaN/Inf
+                if np.isnan(skew_val) or np.isinf(skew_val):
+                    skew_val = 0.0
+                if np.isnan(kurt_val) or np.isinf(kurt_val):
+                    kurt_val = 0.0
+                    
                 profile["distribution"] = {
-                    "skewness": round(float(stats.skew(numeric_series)), 4),
-                    "kurtosis": round(float(stats.kurtosis(numeric_series)), 4),
+                    "skewness": round(skew_val, 4),
+                    "kurtosis": round(kurt_val, 4),
                     "is_normal": self._test_normality(numeric_series),
                     "interpretation": self._interpret_distribution(numeric_series)
                 }

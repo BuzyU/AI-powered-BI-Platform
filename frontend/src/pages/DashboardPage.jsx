@@ -1,7 +1,13 @@
 import { useState, useEffect } from 'react'
+import {
+    BarChart, Bar, LineChart, Line, AreaChart, Area,
+    XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
+    PieChart, Pie, Cell, ScatterChart, Scatter, ZAxis
+} from 'recharts'
 import './DashboardPage.css'
 
-const API_BASE = 'http://localhost:8000/api'
+const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000/api'
+const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#6366f1']
 
 function DashboardPage({ analysisData }) {
     const [loading, setLoading] = useState(!analysisData)
@@ -17,10 +23,16 @@ function DashboardPage({ analysisData }) {
     })
     const [pythonCode, setPythonCode] = useState("sns.pairplot(df)")
     const [plotResult, setPlotResult] = useState(null)
+    const [availableVars, setAvailableVars] = useState([])
 
     useEffect(() => {
         if (!analysisData) {
             fetchAnalysis()
+        } else {
+            // Extract columns for python cheat sheet
+            if (analysisData.datasets && analysisData.datasets.length > 0) {
+                setAvailableVars(analysisData.datasets[0].columns || [])
+            }
         }
     }, [analysisData])
 
@@ -29,7 +41,6 @@ function DashboardPage({ analysisData }) {
         try {
             if (currentFilters) setIsFiltering(true)
 
-            // Check if we are doing initial fetch or filtering
             const url = currentFilters ? `${API_BASE}/analyze` : `${API_BASE}/analysis`
             const method = currentFilters ? 'POST' : 'GET'
             const body = currentFilters ? JSON.stringify({ filters: currentFilters }) : null
@@ -43,8 +54,13 @@ function DashboardPage({ analysisData }) {
             if (response.ok) {
                 const result = await response.json()
                 setData(result)
+                if (result.datasets && result.datasets.length > 0) {
+                    setAvailableVars(result.datasets[0].columns || [])
+                }
             } else {
-                throw new Error("Failed to load analysis")
+                debugger
+                const errText = await response.text()
+                throw new Error(errText || "Failed to load analysis")
             }
         } catch (error) {
             console.error('Failed to fetch analysis:', error)
@@ -72,7 +88,6 @@ function DashboardPage({ analysisData }) {
         { id: 'custom', label: 'Custom Builder' },
         { id: 'python', label: 'Python Plotter' },
         { id: 'insights', label: 'Insights' },
-        { id: 'data', label: 'Data Quality' },
     ]
 
     const handleGenerateCustomChart = async () => {
@@ -131,7 +146,7 @@ function DashboardPage({ analysisData }) {
         }
     }
 
-    if (loading) {
+    if (loading && !data) {
         return (
             <div className="dashboard-loading">
                 <div className="spinner"></div>
@@ -140,7 +155,7 @@ function DashboardPage({ analysisData }) {
         )
     }
 
-    if (error) {
+    if (error && !data) {
         return (
             <div className="dashboard-error">
                 <h2>Analysis Error</h2>
@@ -161,14 +176,16 @@ function DashboardPage({ analysisData }) {
 
     return (
         <div className={`dashboard-page animate-fade-in ${isFiltering ? 'filtering' : ''}`}>
-            <div className="dashboard-overlay" style={{ display: isFiltering ? 'flex' : 'none' }}>
-                <div className="spinner"></div>
-            </div>
+            {isFiltering && (
+                <div className="dashboard-overlay">
+                    <div className="spinner"></div>
+                </div>
+            )}
 
             <header className="page-header">
                 <div className="header-content">
                     <h1>Analysis Dashboard</h1>
-                    <p>Insights generated from your data</p>
+                    <p>Interactive insights & visualizations</p>
                 </div>
                 <div className="header-stats">
                     <div className="stat-item">
@@ -222,31 +239,44 @@ function DashboardPage({ analysisData }) {
             {/* Overview Tab */}
             {activeTab === 'overview' && (
                 <div className="tab-content animate-slide-up">
-                    {/* ... (KPIs, existing content) ... */}
+                    <div className="overview-header">
+                        <h3>Key Metrics (What)</h3>
+                        <p>High-level performance indicators</p>
+                    </div>
 
+                    <div className="kpi-grid">
+                        {data.kpis && data.kpis.map((kpi, i) => (
+                            <div key={i} className="kpi-card card">
+                                <div className="kpi-label">{kpi.label}</div>
+                                <div className="kpi-value">{formatKpiValue(kpi.value, kpi.format)}</div>
+                                {kpi.column && <div className="kpi-source">Source: {kpi.column}</div>}
+                            </div>
+                        ))}
+                    </div>
 
-                    {/* KPI Grid */}
-                    {data.kpis && data.kpis.length > 0 && (
-                        <div className="kpi-grid">
-                            {data.kpis.map((kpi, i) => (
-                                <div key={i} className="kpi-card card">
-                                    <div className="kpi-label">{kpi.label}</div>
-                                    <div className="kpi-value">{formatKpiValue(kpi.value, kpi.format)}</div>
-                                    {kpi.column && (
-                                        <div className="kpi-source">from: {kpi.column}</div>
-                                    )}
-                                </div>
-                            ))}
+                    <div className="overview-header" style={{ marginTop: '2rem' }}>
+                        <h3>Visual Trends (How)</h3>
+                        <p>Distributions and patterns</p>
+                    </div>
+
+                    <div className="quick-charts">
+                        {data.charts && data.charts.slice(0, 2).map((chart, i) => (
+                            <div key={i} className="chart-wrapper-half">
+                                <DynamicChart chart={chart} onFilter={handleFilterChange} />
+                            </div>
+                        ))}
+                    </div>
+
+                    <div className="overview-header" style={{ marginTop: '2rem' }}>
+                        <h3>AI Summary (Why)</h3>
+                        <p>Automated reasoning</p>
+                    </div>
+                    {data.ai_summary ? (
+                        <div className="ai-summary-card card">
+                            <p>{data.ai_summary}</p>
                         </div>
-                    )}
-
-                    {/* Quick Charts */}
-                    {data.charts && data.charts.length > 0 && (
-                        <div className="quick-charts">
-                            {data.charts.slice(0, 2).map((chart, i) => (
-                                <DynamicChart key={i} chart={chart} onFilter={handleFilterChange} />
-                            ))}
-                        </div>
+                    ) : (
+                        <div className="card"><p>AI Summary unavailable.</p></div>
                     )}
                 </div>
             )}
@@ -254,519 +284,264 @@ function DashboardPage({ analysisData }) {
             {/* Charts Tab */}
             {activeTab === 'charts' && (
                 <div className="tab-content animate-slide-up">
-                    {data.charts && data.charts.length > 0 ? (
-                        <div className="charts-grid">
-                            {data.charts.map((chart, i) => (
-                                <DynamicChart key={i} chart={chart} onFilter={handleFilterChange} />
-                            ))}
-                        </div>
-                    ) : (
-                        <div className="empty-state card">
-                            <p>No visualizations available for current filters.</p>
-                        </div>
-                    )}
+                    <div className="charts-grid-full">
+                        {data.charts && data.charts.map((chart, i) => (
+                            <DynamicChart key={i} chart={chart} onFilter={handleFilterChange} />
+                        ))}
+                    </div>
                 </div>
             )}
 
             {/* Custom Builder Tab */}
-            {
-                activeTab === 'custom' && (
-                    <div className="tab-content animate-slide-up">
-                        <div className="builder-controls card">
-                            <h3>Create Custom Chart</h3>
-                            <div className="controls-row" style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', alignItems: 'end' }}>
-                                <div className="control-group">
-                                    <label>Chart Type</label>
-                                    <select value={builderConfig.type} onChange={e => setBuilderConfig({ ...builderConfig, type: e.target.value })}>
-                                        <option value="bar">Bar Chart</option>
-                                        <option value="line">Line Chart</option>
-                                        <option value="area">Area Chart</option>
-                                        <option value="donut">Donut Chart</option>
-                                        <option value="scatter">Scatter Plot</option>
-                                    </select>
-                                </div>
-                                <div className="control-group">
-                                    <label>X Axis (Category/Time)</label>
-                                    <select value={builderConfig.xCol} onChange={e => setBuilderConfig({ ...builderConfig, xCol: e.target.value })}>
-                                        <option value="">Select Column</option>
-                                        {data.datasets?.[0]?.columns?.map(c => (
-                                            <option key={c.name} value={c.name}>{c.name} ({c.semantic_type})</option>
-                                        ))}
-                                    </select>
-                                </div>
-                                <div className="control-group">
-                                    <label>Y Axis (Value)</label>
-                                    <select value={builderConfig.yCol} onChange={e => setBuilderConfig({ ...builderConfig, yCol: e.target.value })}>
-                                        <option value="">None (Count)</option>
-                                        {data.datasets?.[0]?.columns?.filter(c => ['numeric', 'currency', 'percentage'].includes(c.semantic_type)).map(c => (
+            {activeTab === 'custom' && (
+                <div className="tab-content animate-slide-up">
+                    <div className="builder-controls card">
+                        <h3>Create Custom Chart</h3>
+                        <div className="controls-row">
+                            <div className="control-group">
+                                <label>Chart Type</label>
+                                <select value={builderConfig.type} onChange={e => setBuilderConfig({ ...builderConfig, type: e.target.value })}>
+                                    <option value="bar">Bar Chart</option>
+                                    <option value="line">Line Chart</option>
+                                    <option value="area">Area Chart</option>
+                                    <option value="donut">Donut Chart</option>
+                                    <option value="scatter">Scatter Plot</option>
+                                </select>
+                            </div>
+                            <div className="control-group">
+                                <label>X Axis (Category/Time)</label>
+                                <select value={builderConfig.xCol} onChange={e => setBuilderConfig({ ...builderConfig, xCol: e.target.value })}>
+                                    <option value="">Select Column</option>
+                                    {availableVars.map(c => (
+                                        <option key={c.name} value={c.name}>{c.name} ({c.semantic_type})</option>
+                                    ))}
+                                </select>
+                            </div>
+                            <div className="control-group">
+                                <label>Y Axis (Value)</label>
+                                <select value={builderConfig.yCol} onChange={e => setBuilderConfig({ ...builderConfig, yCol: e.target.value })}>
+                                    <option value="">None (Count)</option>
+                                    {availableVars
+                                        .filter(c => ['numeric', 'currency', 'percentage'].includes(c.semantic_type))
+                                        .map(c => (
                                             <option key={c.name} value={c.name}>{c.name}</option>
                                         ))}
-                                    </select>
-                                </div>
-                                <div className="control-group">
-                                    <label>Aggregation</label>
-                                    <select value={builderConfig.aggregation} onChange={e => setBuilderConfig({ ...builderConfig, aggregation: e.target.value })}>
-                                        <option value="sum">Sum</option>
-                                        <option value="mean">Average</option>
-                                        <option value="count">Count</option>
-                                        <option value="min">Min</option>
-                                        <option value="max">Max</option>
-                                    </select>
-                                </div>
-                                <button className="btn-primary" onClick={handleGenerateCustomChart}>Generate</button>
+                                </select>
                             </div>
+                            <div className="control-group">
+                                <label>Aggregation</label>
+                                <select value={builderConfig.aggregation} onChange={e => setBuilderConfig({ ...builderConfig, aggregation: e.target.value })}>
+                                    <option value="sum">Sum</option>
+                                    <option value="mean">Average</option>
+                                    <option value="count">Count</option>
+                                    <option value="min">Min</option>
+                                    <option value="max">Max</option>
+                                </select>
+                            </div>
+                            <button className="btn-primary" onClick={handleGenerateCustomChart}>Generate Interactive Plot</button>
                         </div>
+                    </div>
 
-                        <div className="custom-charts-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))', gap: '1.5rem', marginTop: '2rem' }}>
-                            {customCharts.map((chart, i) => (
-                                <div key={i} className="custom-chart-wrapper" style={{ position: 'relative' }}>
-                                    <button
-                                        onClick={() => setCustomCharts(customCharts.filter((_, idx) => idx !== i))}
-                                        style={{ position: 'absolute', top: '10px', right: '10px', zIndex: 10, background: '#fee2e2', border: 'none', borderRadius: '4px', cursor: 'pointer', padding: '4px 8px' }}
-                                    >✕</button>
-                                    <DynamicChart chart={chart} onFilter={() => { }} />
+                    <div className="custom-charts-grid" style={{ marginTop: '2rem' }}>
+                        {customCharts.map((chart, i) => (
+                            <div key={i} className="custom-chart-wrapper" style={{ position: 'relative', marginBottom: '2rem' }}>
+                                <div style={{ position: 'absolute', top: 0, right: 0, zIndex: 10 }}>
+                                    <button onClick={() => setCustomCharts(customCharts.filter((_, idx) => idx !== i))}>✕</button>
                                 </div>
-                            ))}
-                        </div>
+                                <DynamicChart chart={chart} onFilter={() => { }} />
+                            </div>
+                        ))}
                     </div>
-                )}
-
-
-            {/* Python Plotter Tab */}
-            {activeTab === 'python' && (
-                <div className="tab-content animate-slide-up">
-                    <div className="python-editor card">
-                        <h3>Python Code Editor</h3>
-                        <p style={{ fontSize: '0.9rem', color: '#666', marginBottom: '1rem' }}>
-                            Write valid Python code using <code>df</code> (DataFrame), <code>plt</code> (Matplotlib), and <code>sns</code> (Seaborn).
-                            The plot will be automatically captured.
-                        </p>
-                        <textarea
-                            value={pythonCode}
-                            onChange={(e) => setPythonCode(e.target.value)}
-                            style={{
-                                width: '100%',
-                                height: '200px',
-                                fontFamily: 'monospace',
-                                padding: '1rem',
-                                borderRadius: '0.5rem',
-                                border: '1px solid #e2e8f0',
-                                marginBottom: '1rem',
-                                background: '#1e293b',
-                                color: '#f8fafc'
-                            }}
-                        />
-                        <button className="btn-primary" onClick={handleRunPython}>Run Code</button>
-                    </div>
-
-                    {plotResult && (
-                        <div className="plot-result card" style={{ marginTop: '2rem', textAlign: 'center' }}>
-                            <img src={plotResult} alt="Generated Plot" style={{ maxWidth: '100%', borderRadius: '0.5rem' }} />
-                        </div>
-                    )}
                 </div>
             )}
 
-            {/* Insights Tab */}
-            {
-                activeTab === 'insights' && (
-                    <div className="tab-content animate-slide-up">
-                        {/* AI Summary in Insights */}
-                        {data.ai_summary && (
-                            <div className="ai-summary-card card" style={{ marginBottom: '2rem' }}>
-                                <div className="ai-summary-header">
-                                    <span className="ai-badge">AI Analysis</span>
-                                    <h3>Executive Summary</h3>
-                                </div>
-                                <div className="ai-summary-content">
-                                    <p>{data.ai_summary}</p>
-                                </div>
-                            </div>
-                        )}
-
-                        {data.insights && data.insights.length > 0 ? (
-                            <div className="insights-list">
-                                {data.insights.map((insight, i) => (
-                                    <div key={i} className={`insight-card card insight-${insight.type}`}>
-                                        <div className="insight-icon">
-                                            {getInsightIcon(insight.type)}
-                                        </div>
-                                        <div className="insight-content">
-                                            <h4>{insight.title}</h4>
-                                            <p>{insight.description}</p>
-                                        </div>
-                                    </div>
-                                ))}
-                            </div>
-                        ) : (
-                            <div className="empty-state card">
-                                <p>No insigths generated.</p>
-                            </div>
-                        )}
+            {/* Python Plotter Tab */}
+            {activeTab === 'python' && (
+                <div className="tab-content animate-slide-up" style={{ display: 'flex', gap: '1rem' }}>
+                    <div className="python-sidebar card" style={{ flex: '0 0 250px' }}>
+                        <h4>Available Variables</h4>
+                        <ul className="var-list">
+                            {availableVars.map(v => (
+                                <li key={v.name} className="var-item">
+                                    <span className="var-name">{v.name}</span>
+                                    <span className={`var-type ${v.semantic_type}`}>{v.semantic_type}</span>
+                                </li>
+                            ))}
+                        </ul>
+                        <p style={{ marginTop: '1rem', fontSize: '0.8rem' }}>DataFrame variable: <code>df</code></p>
                     </div>
-                )
-            }
 
-            {/* Data Quality Tab - Kept simplified for brevity in this update */}
-            {
-                activeTab === 'data' && (
-                    <div className="tab-content animate-slide-up">
-                        <div className="quality-overview card">
-                            <h3>Data Quality</h3>
-                            <div className="score-circle">
-                                <span className="score-value">{Math.round(data.summary?.data_quality || 0)}</span>
-                            </div>
+                    <div style={{ flex: 1 }}>
+                        <div className="python-editor card">
+                            <h3>Python Code Editor</h3>
+                            <textarea
+                                value={pythonCode}
+                                onChange={(e) => setPythonCode(e.target.value)}
+                                style={{
+                                    width: '100%',
+                                    height: '200px',
+                                    fontFamily: 'monospace',
+                                    padding: '1rem',
+                                    background: '#1e293b',
+                                    color: '#f8fafc',
+                                    border: '1px solid #334155',
+                                    borderRadius: '4px'
+                                }}
+                            />
+                            <button className="btn-primary" onClick={handleRunPython} style={{ marginTop: '1rem' }}>Run Code</button>
                         </div>
+
+                        {plotResult && (
+                            <div className="plot-result card" style={{ marginTop: '2rem', textAlign: 'center' }}>
+                                <img src={`data:image/png;base64,${plotResult}`} alt="Generated Plot" style={{ maxWidth: '100%', borderRadius: '0.5rem' }} />
+                            </div>
+                        )}
                     </div>
-                )
-            }
-        </div >
+                </div>
+            )}
+            {/* Insights Tab */}
+            {activeTab === 'insights' && (
+                <div className="tab-content animate-slide-up">
+                    {data.ai_summary && (
+                        <div className="card ai-summary-highlight">
+                            <h3>AI Executive Summary</h3>
+                            <p>{data.ai_summary}</p>
+                        </div>
+                    )}
+                    <div className="insights-list" style={{ marginTop: '1rem' }}>
+                        {data.insights.map((insight, i) => (
+                            <div key={i} className={`insight-card card ${insight.type}`}>
+                                <h4>{insight.title}</h4>
+                                <p>{insight.description}</p>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
+        </div>
     )
 }
 
 function DynamicChart({ chart, onFilter }) {
     if (!chart || !chart.data) return null
+    if (chart.data.length === 0) return <div className="card">No data for chart {chart.title}</div>
+
+    const CustomTooltip = ({ active, payload, label }) => {
+        if (active && payload && payload.length) {
+            return (
+                <div className="custom-tooltip" style={{ background: '#fff', padding: '10px', boxShadow: '0 2px 5px rgba(0,0,0,0.1)', borderRadius: '4px', border: '1px solid #ccc' }}>
+                    <p className="label">{`${payload[0].name} : ${payload[0].value.toLocaleString()}`}</p>
+                    <p className="desc">{label}</p>
+                </div>
+            );
+        }
+        return null;
+    };
 
     return (
-        <div className="chart-card card">
+        <div className="chart-card card" style={{ height: '400px', width: '100%', padding: '1rem' }}>
             <h3>{chart.title}</h3>
-
-            {chart.type === 'bar' && <BarChart data={chart.data} xLabel={chart.xLabel} yLabel={chart.yLabel} onClick={(val) => onFilter(chart.xLabel, val)} />}
-            {chart.type === 'line' && <LineChart data={chart.data} xLabel={chart.xLabel} yLabel={chart.yLabel} />}
-            {chart.type === 'area' && <AreaChart data={chart.data} xLabel={chart.xLabel} yLabel={chart.yLabel} />}
-            {chart.type === 'donut' && <DonutChart data={chart.data} onClick={(val) => onFilter(chart.xLabel, val)} />}
-            {chart.type === 'histogram' && <HistogramChart data={chart.data} />}
-            {chart.type === 'scatter' && <ScatterChart data={chart.data} xLabel={chart.xLabel} yLabel={chart.yLabel} />}
-            {chart.type === 'heatmap' && <HeatmapChart data={chart.data} xLabel={chart.xLabel} yLabel={chart.yLabel} />}
-            {chart.type === 'box' && <BoxPlotChart stats={chart.stats} />}
+            <ResponsiveContainer width="100%" height="90%">
+                {renderRechart(chart, onFilter, CustomTooltip)}
+            </ResponsiveContainer>
         </div>
     )
 }
 
-function ScatterChart({ data, xLabel, yLabel }) {
-    const xMax = Math.max(...data.map(d => d.x))
-    const yMax = Math.max(...data.map(d => d.y))
+function renderRechart(chart, onFilter, CustomTooltip) {
+    const { type, data, xLabel, yLabel } = chart
 
-    return (
-        <div className="scatter-chart">
-            <svg viewBox="0 0 100 100" className="chart-svg">
-                {/* Grid lines */}
-                <line x1="0" y1="100" x2="100" y2="100" stroke="#e2e8f0" strokeWidth="2" />
-                <line x1="0" y1="0" x2="0" y2="100" stroke="#e2e8f0" strokeWidth="2" />
-
-                {data.map((point, i) => (
-                    <circle
-                        key={i}
-                        cx={(point.x / xMax) * 90 + 5}
-                        cy={100 - ((point.y / yMax) * 90 + 5)}
-                        r="2.5"
-                        className="scatter-point"
+    switch (type) {
+        case 'bar':
+            return (
+                <BarChart data={data} onClick={(e) => e && e.activeLabel && onFilter(xLabel, e.activeLabel)}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                    <XAxis dataKey="label" label={{ value: xLabel, position: 'insideBottom', offset: -5 }} />
+                    <YAxis label={{ value: yLabel, angle: -90, position: 'insideLeft' }} />
+                    <Tooltip content={<CustomTooltip />} />
+                    <Bar dataKey="value" fill="#3b82f6" radius={[4, 4, 0, 0]} cursor="pointer" />
+                </BarChart>
+            )
+        case 'line':
+            return (
+                <LineChart data={data}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="x" label={{ value: xLabel, position: 'insideBottom', offset: -5 }} />
+                    <YAxis label={{ value: yLabel, angle: -90, position: 'insideLeft' }} />
+                    <Tooltip />
+                    <Line type="monotone" dataKey="y" stroke="#10b981" strokeWidth={2} dot={{ r: 4 }} activeDot={{ r: 8 }} />
+                </LineChart>
+            )
+        case 'area':
+            return (
+                <AreaChart data={data}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="x" />
+                    <YAxis />
+                    <Tooltip />
+                    <Area type="monotone" dataKey="y" stroke="#8b5cf6" fill="#8b5cf6" fillOpacity={0.3} />
+                </AreaChart>
+            )
+        case 'donut':
+            return (
+                <PieChart>
+                    <Pie
+                        data={data}
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={60}
+                        outerRadius={100}
+                        fill="#8884d8"
+                        paddingAngle={5}
+                        dataKey="value"
+                        onClick={(e, index) => onFilter(xLabel, data[index].label)}
+                        cursor="pointer"
                     >
-                        <title>{`${xLabel}: ${point.x}, ${yLabel}: ${point.y}`}</title>
-                    </circle>
-                ))}
-            </svg>
-            <div className="chart-labels">
-                <span>{xLabel}</span>
-                <span className="y-label-vertical">{yLabel}</span>
-            </div>
-        </div>
-    )
+                        {data.map((entry, index) => (
+                            <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                        ))}
+                    </Pie>
+                    <Tooltip />
+                    <Legend />
+                </PieChart>
+            )
+        case 'scatter':
+            return (
+                <ScatterChart>
+                    <CartesianGrid />
+                    <XAxis type="number" dataKey="x" name={xLabel} label={{ value: xLabel, position: 'insideBottom', offset: -5 }} />
+                    <YAxis type="number" dataKey="y" name={yLabel} label={{ value: yLabel, angle: -90, position: 'insideLeft' }} />
+                    <Tooltip cursor={{ strokeDasharray: '3 3' }} />
+                    <Scatter name="Data" data={data} fill="#8884d8" />
+                </ScatterChart>
+            )
+        case 'heatmap':
+            // Recharts doesn't natively support heatmap well, fallback to scatter with sizes/colors or simplified
+            return (
+                <ScatterChart>
+                    <CartesianGrid />
+                    <XAxis dataKey="x" type="category" allowDuplicatedCategory={false} />
+                    <YAxis dataKey="y" type="category" allowDuplicatedCategory={false} />
+                    <ZAxis dataKey="value" range={[50, 400]} />
+                    <Tooltip cursor={{ strokeDasharray: '3 3' }} />
+                    <Scatter data={data} fill="#8884d8" />
+                </ScatterChart>
+            )
+        default:
+            return <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>Chart type {type} not supported yet</div>
+    }
 }
 
-function HeatmapChart({ data, xLabel, yLabel }) {
-    // Get unique X and Y keys
-    const xKeys = [...new Set(data.map(d => d.x))]
-    const yKeys = [...new Set(data.map(d => d.y))]
-
-    // Create grid
-    return (
-        <div className="heatmap-chart">
-            <div className="heatmap-grid" style={{
-                gridTemplateColumns: `repeat(${xKeys.length}, 1fr)`,
-                gridTemplateRows: `repeat(${yKeys.length}, 1fr)`
-            }}>
-                {data.map((cell, i) => (
-                    <div
-                        key={i}
-                        className="heatmap-cell"
-                        style={{
-                            backgroundColor: interpolateColor(cell.value),
-                            opacity: Math.abs(cell.value)
-                        }}
-                        title={`${cell.y} vs ${cell.x}: ${cell.value.toFixed(2)}`}
-                    />
-                ))}
-            </div>
-            <div className="heatmap-labels">
-                <small>Correlation Matrix</small>
-            </div>
-        </div>
-    )
-}
-
-function interpolateColor(value) {
-    // Red for negative, Blue for positive
-    if (value < 0) return `rgba(239, 68, 68, ${Math.abs(value)})`
-    return `rgba(59, 130, 246, ${Math.abs(value)})`
-}
-
-function BoxPlotChart({ stats }) {
-    if (!stats) return null;
-    const { min, q1, median, q3, max } = stats;
-    // Normalize to 0-100 range based on min/max
-    const range = max - min;
-    const normalize = (val) => ((val - min) / range) * 100;
-
-    return (
-        <div className="boxplot-chart">
-            <svg viewBox="0 0 100 60" className="chart-svg">
-                {/* Whisker Line */}
-                <line x1={normalize(min)} y1="30" x2={normalize(max)} y2="30" stroke="#64748b" strokeWidth="2" />
-
-                {/* Box */}
-                <rect
-                    x={normalize(q1)}
-                    y="15"
-                    width={normalize(q3) - normalize(q1)}
-                    height="30"
-                    fill="#e0f2fe"
-                    stroke="#0284c7"
-                    strokeWidth="2"
-                />
-
-                {/* Median Line */}
-                <line
-                    x1={normalize(median)} y1="15"
-                    x2={normalize(median)} y2="45"
-                    stroke="#0284c7"
-                    strokeWidth="3"
-                />
-
-                {/* End Caps */}
-                <line x1={normalize(min)} y1="25" x2={normalize(min)} y2="35" stroke="#64748b" strokeWidth="2" />
-                <line x1={normalize(max)} y1="25" x2={normalize(max)} y2="35" stroke="#64748b" strokeWidth="2" />
-            </svg>
-            <div className="boxplot-stats">
-                <span>Min: {min.toFixed(1)}</span>
-                <span>Med: {median.toFixed(1)}</span>
-                <span>Max: {max.toFixed(1)}</span>
-            </div>
-        </div>
-    )
-}
-
-function AreaChart({ data, xLabel, yLabel }) {
-    const maxValue = Math.max(...data.map(d => d.y))
-    const points = data.map((d, i) => ({
-        x: (i / (data.length - 1)) * 100,
-        y: 100 - (d.y / maxValue) * 100
-    }))
-
-    const pathD = points.map((p, i) =>
-        `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`
-    ).join(' ')
-
-    // Closed path for area fill
-    const areaPath = `${pathD} L 100 100 L 0 100 Z`
-
-    return (
-        <div className="area-chart">
-            <svg viewBox="0 0 100 100" preserveAspectRatio="none">
-                <defs>
-                    <linearGradient id="areaGradient" x1="0" x2="0" y1="0" y2="1">
-                        <stop offset="0%" stopColor="var(--primary-color)" stopOpacity="0.5" />
-                        <stop offset="100%" stopColor="var(--primary-color)" stopOpacity="0.05" />
-                    </linearGradient>
-                </defs>
-                <path d={areaPath} fill="url(#areaGradient)" stroke="none" />
-                <path d={pathD} fill="none" stroke="var(--primary-color)" strokeWidth="2" />
-            </svg>
-            <div className="line-labels">
-                {data.filter((_, i) => i % Math.ceil(data.length / 6) === 0).map((d, i) => (
-                    <span key={i}>{d.x}</span>
-                ))}
-            </div>
-        </div>
-    )
-}
-
-function BarChart({ data, xLabel, yLabel, onClick }) {
-    const maxValue = Math.max(...data.map(d => d.value))
-
-    return (
-        <div className="bar-chart">
-            <div className="chart-bars">
-                {data.map((item, i) => (
-                    <div key={i} className="bar-group">
-                        <div className="bar-container">
-                            <div
-                                className={`bar ${onClick ? 'interactive' : ''}`}
-                                style={{ height: `${(item.value / maxValue) * 100}%` }}
-                                onClick={() => onClick && onClick(item.label)}
-                                title={`${item.label}: ${item.value.toLocaleString()}`}
-                            />
-                        </div>
-                        <span className="bar-label" title={item.label}>
-                            {truncateLabel(item.label)}
-                        </span>
-                    </div>
-                ))}
-            </div>
-            {yLabel && <div className="chart-y-label">{yLabel}</div>}
-            {onClick && <div className="chart-hint">Click bars to filter</div>}
-        </div>
-    )
-}
-
-function LineChart({ data, xLabel, yLabel }) {
-    const maxValue = Math.max(...data.map(d => d.y))
-    const points = data.map((d, i) => ({
-        x: (i / (data.length - 1)) * 100,
-        y: 100 - (d.y / maxValue) * 100
-    }))
-
-    const pathD = points.map((p, i) =>
-        `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`
-    ).join(' ')
-
-    return (
-        <div className="line-chart">
-            <svg viewBox="0 0 100 100" preserveAspectRatio="none">
-                <path d={pathD} fill="none" stroke="var(--primary-500)" strokeWidth="2" vectorEffect="non-scaling-stroke" />
-                {points.length <= 20 && points.map((p, i) => (
-                    <circle key={i} cx={p.x} cy={p.y} r="2" fill="var(--primary-500)" vectorEffect="non-scaling-stroke" />
-                ))}
-            </svg>
-            <div className="line-labels">
-                {data.filter((_, i) => i % Math.ceil(data.length / 6) === 0).map((d, i) => (
-                    <span key={i}>{d.x}</span>
-                ))}
-            </div>
-        </div>
-    )
-}
-
-function DonutChart({ data, onClick }) {
-    const total = data.reduce((sum, d) => sum + d.value, 0)
-    const colors = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899']
-
-    let currentAngle = 0
-    const segments = data.map((d, i) => {
-        const angle = (d.value / total) * 360
-        const segment = { ...d, startAngle: currentAngle, angle, color: colors[i % colors.length] }
-        currentAngle += angle
-        return segment
-    })
-
-    return (
-        <div className="donut-chart">
-            <div className="donut-visual">
-                <svg viewBox="0 0 100 100">
-                    {segments.map((seg, i) => {
-                        const startAngle = (seg.startAngle - 90) * Math.PI / 180
-                        const endAngle = (seg.startAngle + seg.angle - 90) * Math.PI / 180
-                        const x1 = 50 + 40 * Math.cos(startAngle)
-                        const y1 = 50 + 40 * Math.sin(startAngle)
-                        const x2 = 50 + 40 * Math.cos(endAngle)
-                        const y2 = 50 + 40 * Math.sin(endAngle)
-                        const largeArc = seg.angle > 180 ? 1 : 0
-
-                        return (
-                            <path
-                                key={i}
-                                d={`M 50 50 L ${x1} ${y1} A 40 40 0 ${largeArc} 1 ${x2} ${y2} Z`}
-                                fill={seg.color}
-                                className={onClick ? 'interactive' : ''}
-                                onClick={() => onClick && onClick(seg.label)}
-                            />
-                        )
-                    })}
-                    <circle cx="50" cy="50" r="25" fill="white" />
-                </svg>
-            </div>
-            <div className="donut-legend">
-                {segments.map((seg, i) => (
-                    <div key={i} className="legend-item">
-                        <span className="legend-dot" style={{ background: seg.color }}></span>
-                        <span className="legend-label">{truncateLabel(seg.label)}</span>
-                        <span className="legend-value">{seg.value.toLocaleString()}</span>
-                    </div>
-                ))}
-            </div>
-        </div>
-    )
-}
-
-function HistogramChart({ data }) {
-    const maxCount = Math.max(...data.map(d => d.count))
-
-    return (
-        <div className="histogram-chart">
-            <div className="histogram-bars">
-                {data.map((item, i) => (
-                    <div key={i} className="histogram-bar-group">
-                        <div
-                            className="histogram-bar"
-                            style={{ height: `${(item.count / maxCount) * 100}%` }}
-                            title={`${item.range}: ${item.count}`}
-                        />
-                        <span className="histogram-label">{item.range}</span>
-                    </div>
-                ))}
-            </div>
-        </div>
-    )
-}
 
 function formatKpiValue(value, format) {
     if (value === null || value === undefined) return '-'
-
     switch (format) {
         case 'currency':
             if (value >= 1000000) return `$${(value / 1000000).toFixed(2)}M`
             if (value >= 1000) return `$${(value / 1000).toFixed(1)}K`
             return `$${value.toFixed(2)}`
-        case 'percent':
-            return `${value.toFixed(1)}%`
-        case 'number':
-        default:
-            return value.toLocaleString()
-    }
-}
-
-function truncateLabel(label, maxLen = 12) {
-    if (!label) return ''
-    const str = String(label)
-    return str.length > maxLen ? str.substring(0, maxLen) + '...' : str
-}
-
-function getInsightIcon(type) {
-    switch (type) {
-        case 'warning':
-            return (
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
-                    <line x1="12" y1="9" x2="12" y2="13" />
-                    <line x1="12" y1="17" x2="12.01" y2="17" />
-                </svg>
-            )
-        case 'tip':
-            return (
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <circle cx="12" cy="12" r="10" />
-                    <line x1="12" y1="16" x2="12" y2="12" />
-                    <line x1="12" y1="8" x2="12.01" y2="8" />
-                </svg>
-            )
-        default:
-            return (
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <circle cx="12" cy="12" r="10" />
-                    <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" />
-                    <line x1="12" y1="17" x2="12.01" y2="17" />
-                </svg>
-            )
+        case 'percent': return `${value.toFixed(1)}%`
+        default: return value.toLocaleString()
     }
 }
 
