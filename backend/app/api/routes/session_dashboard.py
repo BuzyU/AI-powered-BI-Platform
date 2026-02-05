@@ -5,14 +5,130 @@ from fastapi import APIRouter, Header, HTTPException
 from typing import Dict, Any, List, Optional
 from pydantic import BaseModel
 import numpy as np
+from pathlib import Path
 
 from app.services import state
+from app.services.model_service import model_service
 from app.layers.l2_classification.persona_detector import persona_detector
 from app.layers.l7_analytics.adaptive_dashboard import adaptive_dashboard_generator
 from app.services.analyzer import DataAnalyzer
 
 router = APIRouter()
 analyzer = DataAnalyzer()
+
+
+def _render_model_info(session_id: str, spec: Dict) -> Dict:
+    """Render model information chart."""
+    datasets = state.get_all_datasets(session_id)
+    model_files = [d for d in datasets if d.get('metadata', {}).get('is_model')]
+    
+    if not model_files:
+        return {'chart_id': spec['id'], 'type': 'kpi', 'value': 'No model', 'formatted_value': 'No model found'}
+    
+    model = model_files[0]
+    model_type = model.get('metadata', {}).get('model_type', 'Unknown')
+    filename = model.get('filename', 'Unknown')
+    
+    return {
+        'chart_id': spec['id'],
+        'title': spec.get('title', 'Model Type'),
+        'type': 'kpi',
+        'value': model_type,
+        'formatted_value': model_type,
+        'subtitle': filename,
+        'icon': 'cpu'
+    }
+
+
+def _render_model_only_chart(session_id: str, datasets: List[Dict], spec: Dict) -> Dict:
+    """Render charts for model-only sessions."""
+    chart_type = spec.get('type', 'kpi')
+    chart_id = spec.get('id')
+    title = spec.get('title', '')
+    agg = spec.get('aggregation', '')
+    
+    model_files = [d for d in datasets if d.get('metadata', {}).get('is_model')]
+    
+    if chart_type == 'kpi':
+        if agg == 'model_info' or 'model' in chart_id.lower():
+            model = model_files[0] if model_files else {}
+            model_type = model.get('metadata', {}).get('model_type', 'Unknown')
+            return {
+                'chart_id': chart_id,
+                'title': title,
+                'type': 'kpi',
+                'value': model_type,
+                'formatted_value': model_type,
+                'icon': 'cpu'
+            }
+        elif 'sample' in chart_id.lower() or 'count' in agg:
+            return {
+                'chart_id': chart_id,
+                'title': title,
+                'type': 'kpi',
+                'value': 0,
+                'formatted_value': 'No data',
+                'subtitle': 'Upload a dataset to evaluate',
+                'icon': 'database'
+            }
+        else:
+            return {
+                'chart_id': chart_id,
+                'title': title,
+                'type': 'kpi',
+                'value': 'N/A',
+                'formatted_value': 'N/A',
+                'subtitle': 'Upload data to calculate',
+                'icon': 'help-circle'
+            }
+    
+    elif chart_type == 'gauge':
+        return {
+            'chart_id': chart_id,
+            'title': title,
+            'type': 'gauge',
+            'value': 0,
+            'max': 100,
+            'message': 'Upload evaluation data to calculate accuracy',
+            'thresholds': [60, 80, 90]
+        }
+    
+    elif chart_type == 'heatmap':
+        return {
+            'chart_id': chart_id,
+            'title': title,
+            'type': 'heatmap',
+            'data': [],
+            'message': 'Upload prediction data to see confusion matrix'
+        }
+    
+    elif chart_type in ['bar', 'histogram']:
+        return {
+            'chart_id': chart_id,
+            'title': title,
+            'type': chart_type,
+            'data': [],
+            'message': 'Upload data to see distribution'
+        }
+    
+    elif chart_type == 'table':
+        return {
+            'chart_id': chart_id,
+            'title': title,
+            'type': 'table',
+            'columns': [],
+            'data': [],
+            'message': 'Upload data to see predictions'
+        }
+    
+    # Default response
+    return {
+        'chart_id': chart_id,
+        'title': title,
+        'type': chart_type,
+        'data': [],
+        'message': 'Upload a dataset to see this visualization'
+    }
 
 
 class ChartDataRequest(BaseModel):
@@ -42,8 +158,15 @@ async def get_session_dashboard(x_session_id: str = Header("default_session")):
     
     # Prepare datasets with dataframes
     datasets_with_df = []
+    model_files = []
+    
     for ds in datasets:
         df = state.get_dataset_df(x_session_id, ds['id'])
+        is_model = ds.get('metadata', {}).get('is_model', False)
+        
+        if is_model:
+            model_files.append(ds)
+        
         datasets_with_df.append({
             'id': ds['id'],
             'filename': ds.get('filename', ''),
@@ -66,6 +189,35 @@ async def get_session_dashboard(x_session_id: str = Header("default_session")):
         'recommended_analysis': persona_result.recommended_analysis,
         'summary': persona_result.summary
     }
+    
+    # Add model info if models are present
+    if model_files:
+        config_dict['has_model'] = True
+        config_dict['model_id'] = model_files[0]['id']
+        config_dict['model_info'] = {
+            'id': model_files[0]['id'],
+            'filename': model_files[0].get('filename', ''),
+            'model_type': model_files[0].get('metadata', {}).get('model_type', 'Unknown'),
+            'file_type': model_files[0].get('file_type', '')
+        }
+    else:
+        config_dict['has_model'] = False
+        config_dict['model_id'] = None
+        config_dict['model_info'] = None
+    
+    # Add evaluation results if available
+    evaluation = state.get_evaluation(x_session_id)
+    if evaluation:
+        config_dict['has_evaluation'] = True
+        config_dict['evaluation_summary'] = {
+            'task': evaluation.get('task'),
+            'accuracy': evaluation.get('accuracy'),
+            'f1_score': evaluation.get('f1_score'),
+            'r2': evaluation.get('r2'),
+            'n_samples': evaluation.get('n_samples')
+        }
+    else:
+        config_dict['has_evaluation'] = False
     
     # Cache it
     state.store_dashboard_config(x_session_id, config_dict)
@@ -98,10 +250,17 @@ async def get_chart_data(
     if not chart_spec:
         raise HTTPException(404, f"Chart {request.chart_id} not found in tab {request.tab_id}")
     
+    # Handle model-only sessions - return model info charts
+    if chart_spec.get('aggregation') == 'model_info':
+        return _render_model_info(x_session_id, chart_spec)
+    
     # Get dataset(s)
     datasets = state.get_all_datasets(x_session_id)
     if not datasets:
         raise HTTPException(400, "No datasets available")
+    
+    # Check if it's model-only session
+    has_data = any(not ds.get('metadata', {}).get('is_model') for ds in datasets)
     
     # Get first non-model dataset
     df = None
@@ -111,8 +270,9 @@ async def get_chart_data(
             if df is not None:
                 break
     
-    if df is None:
-        raise HTTPException(400, "No data available for charting")
+    if df is None and not has_data:
+        # Model-only session - return placeholder data
+        return _render_model_only_chart(x_session_id, datasets, chart_spec)
     
     # Apply filters
     if request.filters:

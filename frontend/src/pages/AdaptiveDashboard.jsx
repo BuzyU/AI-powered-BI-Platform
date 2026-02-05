@@ -14,6 +14,7 @@ import {
   PolarGrid, PolarAngleAxis, PolarRadiusAxis, Treemap
 } from 'recharts'
 import { useSession } from '../contexts/SessionContext'
+import ModelEvaluator from '../components/ModelEvaluator'
 import './AdaptiveDashboard.css'
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000/api'
@@ -229,6 +230,19 @@ export default function AdaptiveDashboard() {
         </div>
       )}
 
+      {/* Model Evaluator - Always shown for ML personas or when models are present */}
+      {/* Also add a toggle button to show it on demand */}
+      <ModelEvaluatorSection 
+        personaType={personaType}
+        dashboard={dashboard}
+        sessionId={sessionId}
+        onEvaluationComplete={() => {
+          // Clear tab data and refresh dashboard after evaluation
+          setTabData({})
+          fetchDashboard()
+        }}
+      />
+
       {/* Tab Navigation */}
       <nav className="dashboard-tabs">
         {dashboard.tabs?.map(tab => (
@@ -264,6 +278,51 @@ export default function AdaptiveDashboard() {
           </div>
         )}
       </div>
+    </div>
+  )
+}
+
+// Model Evaluator Section with toggle
+function ModelEvaluatorSection({ personaType, dashboard, sessionId, onEvaluationComplete }) {
+  const [showEvaluator, setShowEvaluator] = useState(false)
+  
+  // Auto-show for ML personas or when model is present
+  const autoShow = personaType === 'ML_ENGINEER' || dashboard.has_model
+  
+  // If we have evaluation results, show a summary badge
+  const hasEvaluation = dashboard.has_evaluation
+  
+  return (
+    <div className="model-evaluator-section">
+      {!autoShow && !showEvaluator && (
+        <button 
+          className="btn-evaluate-toggle"
+          onClick={() => setShowEvaluator(true)}
+        >
+          <span>🧪</span>
+          Evaluate Model Predictions
+          {hasEvaluation && <span className="eval-badge">✓</span>}
+        </button>
+      )}
+      
+      {(autoShow || showEvaluator) && (
+        <div className="evaluator-wrapper">
+          {!autoShow && (
+            <button 
+              className="btn-close-evaluator"
+              onClick={() => setShowEvaluator(false)}
+              title="Close evaluator"
+            >
+              ✕
+            </button>
+          )}
+          <ModelEvaluator 
+            modelId={dashboard.model_id}
+            modelInfo={dashboard.model_info}
+            onEvaluationComplete={onEvaluationComplete}
+          />
+        </div>
+      )}
     </div>
   )
 }
@@ -324,7 +383,10 @@ function KPICard({ chart, colors, personaType }) {
     'percent': '📊',
     'hash': '#',
     'accuracy': '🎯',
-    'error': '⚠️'
+    'error': '⚠️',
+    'cpu': '🤖',
+    'database': '🗄️',
+    'help-circle': '❓'
   }
   
   const icon = iconMap[config.icon] || iconMap[data.icon] || '📊'
@@ -333,8 +395,9 @@ function KPICard({ chart, colors, personaType }) {
     <div className={`kpi-card persona-${personaType.toLowerCase()}`}>
       <div className="kpi-icon">{icon}</div>
       <div className="kpi-content">
-        <div className="kpi-value">{data.formatted_value || data.value || 0}</div>
+        <div className="kpi-value">{data.formatted_value || data.value || 'N/A'}</div>
         <div className="kpi-label">{chart.title}</div>
+        {data.subtitle && <div className="kpi-subtitle">{data.subtitle}</div>}
       </div>
     </div>
   )
@@ -374,7 +437,27 @@ function RenderChart({ type, data, colors, personaType }) {
     )
   }
 
+  // Handle message-only responses (model-only sessions)
+  if (data.message && (!data.data || data.data.length === 0)) {
+    return (
+      <div className="chart-placeholder">
+        <span className="placeholder-icon">📊</span>
+        <p>{data.message}</p>
+      </div>
+    )
+  }
+
   const chartData = data.data || []
+  
+  // Handle empty data
+  if (chartData.length === 0 && type !== 'gauge') {
+    return (
+      <div className="chart-placeholder">
+        <span className="placeholder-icon">📊</span>
+        <p>{data.message || 'No data to display'}</p>
+      </div>
+    )
+  }
   
   switch (type) {
     case 'bar':
@@ -403,7 +486,7 @@ function RenderChart({ type, data, colors, personaType }) {
       return <HeatmapComponent data={chartData} colors={colors} columns={data.columns} />
     
     case 'gauge':
-      return <GaugeComponent value={data.value} max={data.max} thresholds={data.thresholds} colors={colors} />
+      return <GaugeComponent value={data.value} max={data.max} thresholds={data.thresholds} colors={colors} message={data.message} />
     
     case 'table':
       return <TableComponent data={chartData} columns={data.columns} totalRows={data.total_rows} />
@@ -816,7 +899,19 @@ function HeatmapComponent({ data, colors, columns }) {
   )
 }
 
-function GaugeComponent({ value, max, thresholds, colors }) {
+function GaugeComponent({ value, max, thresholds, colors, message }) {
+  // Handle no value case
+  if (value === null || value === undefined || value === 0) {
+    return (
+      <div className="gauge-container">
+        <div className="gauge-placeholder">
+          <span className="gauge-icon">🎯</span>
+          <p>{message || 'Upload evaluation data to see accuracy'}</p>
+        </div>
+      </div>
+    )
+  }
+  
   const percentage = Math.min((value / (max || 100)) * 100, 100)
   
   // Determine color based on thresholds

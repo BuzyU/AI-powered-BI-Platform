@@ -9,6 +9,8 @@ from app.config import settings
 from app.api.routes import upload
 from app.api.routes import session_dashboard
 from app.api.routes import models
+from app.api.routes import enhanced_evaluation
+from app.api.routes import enhanced_dashboard
 
 # Setup logging
 logging.basicConfig(
@@ -66,7 +68,7 @@ async def lifespan(app: FastAPI):
     """Application lifespan handler for startup and shutdown."""
     global cleanup_task
     
-    logger.info(f"Starting BI Intelligence Platform v{settings.APP_VERSION}")
+    logger.info(f"Starting Sustainable Pronto v{settings.APP_VERSION}")
     
     # Clean up upload directory on startup
     upload_path = Path(settings.UPLOAD_DIR)
@@ -85,14 +87,14 @@ async def lifespan(app: FastAPI):
         except asyncio.CancelledError:
             pass
     
-    logger.info("Shutting down BI Intelligence Platform")
+    logger.info("Shutting down Sustainable Pronto")
 
 
 # Create FastAPI application
 app = FastAPI(
     title=settings.APP_NAME,
     version=settings.APP_VERSION,
-    description="AI-powered Business Intelligence & CRM Intelligence Platform",
+    description="Sustainable Pronto - AI-powered Sustainability Analytics Platform",
     openapi_url="/api/openapi.json",
     docs_url="/api/docs",
     redoc_url="/api/redoc",
@@ -114,6 +116,8 @@ app.add_middleware(
 app.include_router(upload.router, prefix="/api", tags=["API"])
 app.include_router(session_dashboard.router, prefix="/api", tags=["Dashboard"])
 app.include_router(models.router, prefix="/api", tags=["Models"])
+app.include_router(enhanced_evaluation.router, prefix="/api", tags=["Evaluation"])
+app.include_router(enhanced_dashboard.router, prefix="/api", tags=["Enhanced Dashboard"])
 
 
 @app.get("/health")

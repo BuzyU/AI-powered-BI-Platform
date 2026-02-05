@@ -316,6 +316,270 @@ async def unload_model(model_id: str, x_session_id: str = Header("default_sessio
     return {'success': True, 'message': f'Model {model_id} unloaded'}
 
 
+# ============== MODEL EVALUATION FROM PREDICTIONS FILE ==============
+
+@router.post("/models/evaluate-predictions")
+async def evaluate_predictions_file(
+    file: UploadFile = File(...),
+    x_session_id: str = Header("default_session")
+):
+    """
+    Evaluate model performance from a CSV with pre-computed predictions.
+    
+    Upload a CSV file with columns:
+    - 'actual' or 'y_true' or 'true' or 'label': The true values
+    - 'predicted' or 'y_pred' or 'pred' or 'prediction': The predicted values
+    - Optional: 'probability' or 'confidence': Prediction confidence
+    
+    Returns metrics for classification (accuracy, F1, confusion matrix) 
+    or regression (MSE, R², MAE) based on detected task type.
+    """
+    import io
+    from sklearn.metrics import (
+        accuracy_score, precision_score, recall_score, f1_score,
+        mean_squared_error, r2_score, mean_absolute_error,
+        confusion_matrix, classification_report, roc_auc_score
+    )
+    
+    # Read the file
+    content = await file.read()
+    
+    try:
+        # Try CSV first
+        if file.filename.endswith('.csv'):
+            df = pd.read_csv(io.BytesIO(content))
+        elif file.filename.endswith(('.xlsx', '.xls')):
+            df = pd.read_excel(io.BytesIO(content))
+        else:
+            # Try as CSV anyway
+            df = pd.read_csv(io.BytesIO(content))
+    except Exception as e:
+        raise HTTPException(400, f"Failed to parse file: {str(e)}")
+    
+    # Find actual column
+    actual_cols = ['actual', 'y_true', 'true', 'label', 'target', 'ground_truth']
+    actual_col = None
+    for col in actual_cols:
+        if col in df.columns.str.lower().tolist():
+            actual_col = df.columns[df.columns.str.lower() == col][0]
+            break
+    
+    if actual_col is None:
+        raise HTTPException(400, f"Could not find actual/true column. Expected one of: {actual_cols}")
+    
+    # Find predicted column
+    pred_cols = ['predicted', 'y_pred', 'pred', 'prediction', 'predictions', 'output']
+    pred_col = None
+    for col in pred_cols:
+        if col in df.columns.str.lower().tolist():
+            pred_col = df.columns[df.columns.str.lower() == col][0]
+            break
+    
+    if pred_col is None:
+        raise HTTPException(400, f"Could not find predicted column. Expected one of: {pred_cols}")
+    
+    y_true = df[actual_col].values
+    y_pred = df[pred_col].values
+    
+    # Detect task type (classification vs regression)
+    unique_actual = np.unique(y_true)
+    unique_pred = np.unique(y_pred)
+    
+    # If few unique values and integers, likely classification
+    is_classification = (
+        len(unique_actual) <= 20 and 
+        (np.issubdtype(y_true.dtype, np.integer) or 
+         all(isinstance(v, (int, str, bool)) or (isinstance(v, float) and v.is_integer()) for v in unique_actual[:100]))
+    )
+    
+    metrics = {
+        'n_samples': len(y_true),
+        'filename': file.filename,
+        'actual_column': actual_col,
+        'predicted_column': pred_col
+    }
+    
+    if is_classification:
+        metrics['task'] = 'classification'
+        
+        # Convert to same type for comparison
+        if y_true.dtype != y_pred.dtype:
+            y_true = y_true.astype(str)
+            y_pred = y_pred.astype(str)
+        
+        metrics['accuracy'] = round(float(accuracy_score(y_true, y_pred)) * 100, 2)
+        metrics['precision'] = round(float(precision_score(y_true, y_pred, average='weighted', zero_division=0)) * 100, 2)
+        metrics['recall'] = round(float(recall_score(y_true, y_pred, average='weighted', zero_division=0)) * 100, 2)
+        metrics['f1_score'] = round(float(f1_score(y_true, y_pred, average='weighted', zero_division=0)) * 100, 2)
+        
+        # Confusion matrix
+        cm = confusion_matrix(y_true, y_pred)
+        metrics['confusion_matrix'] = cm.tolist()
+        metrics['class_labels'] = sorted([str(c) for c in unique_actual])
+        metrics['n_classes'] = len(unique_actual)
+        
+        # Per-class metrics
+        try:
+            report = classification_report(y_true, y_pred, output_dict=True, zero_division=0)
+            metrics['per_class'] = {k: v for k, v in report.items() if k not in ['accuracy', 'macro avg', 'weighted avg']}
+        except:
+            pass
+        
+        # Prediction distribution
+        pred_counts = pd.Series(y_pred).value_counts().to_dict()
+        metrics['prediction_distribution'] = {str(k): int(v) for k, v in pred_counts.items()}
+        
+    else:
+        metrics['task'] = 'regression'
+        
+        # Convert to float
+        y_true = y_true.astype(float)
+        y_pred = y_pred.astype(float)
+        
+        metrics['mse'] = round(float(mean_squared_error(y_true, y_pred)), 4)
+        metrics['rmse'] = round(float(np.sqrt(metrics['mse'])), 4)
+        metrics['mae'] = round(float(mean_absolute_error(y_true, y_pred)), 4)
+        metrics['r2'] = round(float(r2_score(y_true, y_pred)), 4)
+        
+        # Scatter plot data (sample for large datasets)
+        if len(y_true) > 500:
+            indices = np.random.choice(len(y_true), 500, replace=False)
+            scatter_actual = y_true[indices]
+            scatter_pred = y_pred[indices]
+        else:
+            scatter_actual = y_true
+            scatter_pred = y_pred
+        
+        metrics['scatter_data'] = [
+            {'actual': float(a), 'predicted': float(p)} 
+            for a, p in zip(scatter_actual, scatter_pred)
+        ]
+        
+        # Residuals distribution
+        residuals = y_true - y_pred
+        metrics['residual_stats'] = {
+            'mean': round(float(residuals.mean()), 4),
+            'std': round(float(residuals.std()), 4),
+            'min': round(float(residuals.min()), 4),
+            'max': round(float(residuals.max()), 4)
+        }
+    
+    # Store in session for dashboard
+    state.store_evaluation(x_session_id, metrics)
+    
+    return metrics
+
+
+@router.post("/models/{model_id}/evaluate-with-file")
+async def evaluate_model_with_file(
+    model_id: str,
+    file: UploadFile = File(...),
+    x_session_id: str = Header("default_session")
+):
+    """
+    Upload a test dataset and evaluate the loaded model.
+    
+    The CSV/Excel should have feature columns matching the model's expected input.
+    If a 'target' or 'label' column exists, it will be used for evaluation.
+    Otherwise, only predictions are returned.
+    
+    This enables running inference on new data directly.
+    """
+    import io
+    
+    # Check if model is loaded
+    info = model_service.get_model_info(model_id)
+    if not info:
+        # Try to load it first
+        dataset = state.get_dataset(x_session_id, model_id)
+        if not dataset:
+            raise HTTPException(404, f"Model {model_id} not found in session")
+        
+        if dataset.get('metadata', {}).get('is_model'):
+            file_path = dataset.get('file_path')
+            model_service.load_model(file_path, model_id)
+            info = model_service.get_model_info(model_id)
+        
+        if not info:
+            raise HTTPException(400, f"Failed to load model {model_id}")
+    
+    # Read test data
+    content = await file.read()
+    
+    try:
+        if file.filename.endswith('.csv'):
+            df = pd.read_csv(io.BytesIO(content))
+        elif file.filename.endswith(('.xlsx', '.xls')):
+            df = pd.read_excel(io.BytesIO(content))
+        else:
+            df = pd.read_csv(io.BytesIO(content))
+    except Exception as e:
+        raise HTTPException(400, f"Failed to parse file: {str(e)}")
+    
+    # Find target column if exists
+    target_cols = ['target', 'label', 'y', 'actual', 'class', 'output']
+    target_col = None
+    for col in target_cols:
+        if col in df.columns.str.lower().tolist():
+            target_col = df.columns[df.columns.str.lower() == col][0]
+            break
+    
+    # Get features (all numeric columns except target)
+    if target_col:
+        X = df.drop(columns=[target_col]).select_dtypes(include=[np.number])
+        y_true = df[target_col].values
+    else:
+        X = df.select_dtypes(include=[np.number])
+        y_true = None
+    
+    if X.empty:
+        raise HTTPException(400, "No numeric feature columns found in the file")
+    
+    # Run predictions
+    result = model_service.predict(model_id, X)
+    
+    if 'error' in result:
+        raise HTTPException(500, result['error'])
+    
+    # If we have true labels, compute metrics
+    if y_true is not None:
+        from sklearn.metrics import (
+            accuracy_score, precision_score, recall_score, f1_score,
+            mean_squared_error, r2_score, mean_absolute_error, confusion_matrix
+        )
+        
+        y_pred = np.array(result['predictions'])
+        task = info.get('task', 'classification')
+        
+        result['has_evaluation'] = True
+        result['n_test_samples'] = len(y_true)
+        
+        if task == 'classification':
+            result['accuracy'] = round(float(accuracy_score(y_true, y_pred)) * 100, 2)
+            result['precision'] = round(float(precision_score(y_true, y_pred, average='weighted', zero_division=0)) * 100, 2)
+            result['recall'] = round(float(recall_score(y_true, y_pred, average='weighted', zero_division=0)) * 100, 2)
+            result['f1_score'] = round(float(f1_score(y_true, y_pred, average='weighted', zero_division=0)) * 100, 2)
+            result['confusion_matrix'] = confusion_matrix(y_true, y_pred).tolist()
+        else:
+            y_true_float = y_true.astype(float)
+            y_pred_float = np.array(y_pred).astype(float)
+            result['mse'] = round(float(mean_squared_error(y_true_float, y_pred_float)), 4)
+            result['rmse'] = round(float(np.sqrt(result['mse'])), 4)
+            result['mae'] = round(float(mean_absolute_error(y_true_float, y_pred_float)), 4)
+            result['r2'] = round(float(r2_score(y_true_float, y_pred_float)), 4)
+    else:
+        result['has_evaluation'] = False
+        result['message'] = 'No target column found. Showing predictions only.'
+    
+    result['feature_columns'] = X.columns.tolist()
+    result['filename'] = file.filename
+    
+    # Store in session for dashboard
+    state.store_evaluation(x_session_id, result)
+    
+    return result
+
+
 # ============== QUICK INFERENCE ENDPOINT ==============
 
 @router.post("/models/quick-predict")

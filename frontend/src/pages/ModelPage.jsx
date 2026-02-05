@@ -14,8 +14,8 @@ function ModelPage({ model, onBack }) {
     const [datasets, setDatasets] = useState([])
     const [selectedDataset, setSelectedDataset] = useState('')
     const [targetColumn, setTargetColumn] = useState('')
-    const [featureColumns, setFeatureColumns] = useState([])
     const [activeTab, setActiveTab] = useState('info')
+    const [customInput, setCustomInput] = useState({})
 
     // Fetch datasets for evaluation
     useEffect(() => {
@@ -25,7 +25,6 @@ function ModelPage({ model, onBack }) {
                     headers: { 'x-session-id': sessionId }
                 })
                 const data = await res.json()
-                // Filter out model files
                 const dataFiles = (data.datasets || []).filter(d => !d.metadata?.is_model)
                 setDatasets(dataFiles)
             } catch (err) {
@@ -53,6 +52,13 @@ function ModelPage({ model, onBack }) {
             
             const data = await res.json()
             setModelInfo(data)
+            
+            // Initialize custom input fields
+            if (data.features) {
+                const initialInput = {}
+                data.features.forEach(f => { initialInput[f] = '' })
+                setCustomInput(initialInput)
+            }
         } catch (err) {
             setError(err.message)
         } finally {
@@ -60,20 +66,26 @@ function ModelPage({ model, onBack }) {
         }
     }
 
-    // Get model info
-    const getModelInfo = async () => {
-        try {
-            const res = await fetch(`${API_BASE}/models/${model.id}`, {
-                headers: { 'x-session-id': sessionId }
-            })
-            const data = await res.json()
-            setModelInfo(data)
-        } catch (err) {
-            console.error('Failed to get model info:', err)
-        }
-    }
-
+    // Get model info on mount
     useEffect(() => {
+        const getModelInfo = async () => {
+            try {
+                const res = await fetch(`${API_BASE}/models/${model.id}`, {
+                    headers: { 'x-session-id': sessionId }
+                })
+                if (res.ok) {
+                    const data = await res.json()
+                    setModelInfo(data)
+                    if (data.features) {
+                        const initialInput = {}
+                        data.features.forEach(f => { initialInput[f] = '' })
+                        setCustomInput(initialInput)
+                    }
+                }
+            } catch (err) {
+                console.error('Failed to get model info:', err)
+            }
+        }
         getModelInfo()
     }, [model.id, sessionId])
 
@@ -97,7 +109,6 @@ function ModelPage({ model, onBack }) {
                 body: JSON.stringify({
                     dataset_id: selectedDataset,
                     target_column: targetColumn,
-                    feature_columns: featureColumns.length > 0 ? featureColumns : undefined,
                     test_split: 0.2
                 })
             })
@@ -135,7 +146,6 @@ function ModelPage({ model, onBack }) {
                 },
                 body: JSON.stringify({
                     dataset_id: selectedDataset,
-                    feature_columns: featureColumns.length > 0 ? featureColumns : undefined,
                     limit: 100
                 })
             })
@@ -154,33 +164,145 @@ function ModelPage({ model, onBack }) {
         }
     }
 
+    // Single prediction with custom input
+    const predictSingle = async () => {
+        setLoading(true)
+        setError(null)
+
+        try {
+            const inputData = Object.entries(customInput).map(([key, value]) => {
+                const num = parseFloat(value)
+                return isNaN(num) ? value : num
+            })
+
+            const res = await fetch(`${API_BASE}/models/${model.id}/predict`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'x-session-id': sessionId
+                },
+                body: JSON.stringify({ input_data: [inputData] })
+            })
+
+            if (!res.ok) {
+                const err = await res.json()
+                throw new Error(err.detail || 'Prediction failed')
+            }
+
+            const data = await res.json()
+            setPredictions(data)
+        } catch (err) {
+            setError(err.message)
+        } finally {
+            setLoading(false)
+        }
+    }
+
+    const formatMetricValue = (value, isPercentage = true) => {
+        if (value === undefined || value === null) return 'N/A'
+        if (isPercentage) return `${(value * 100).toFixed(2)}%`
+        return value.toFixed(4)
+    }
+
+    const renderModelHeader = () => (
+        <div className="model-header">
+            <div className="model-header-content">
+                <h1>
+                    <span>🤖</span>
+                    {model.filename}
+                    <span className="model-type-badge">
+                        {modelInfo?.framework || model.metadata?.model_type || 'ML Model'}
+                    </span>
+                </h1>
+                <p className="model-file">
+                    {model.metadata?.file_size_mb || modelInfo?.file_size_mb || '?'} MB • 
+                    {modelInfo?.task || 'Unknown Task'}
+                </p>
+                
+                <div className="model-quick-stats">
+                    {modelInfo?.n_features && (
+                        <div className="quick-stat">
+                            <div className="quick-stat-value">{modelInfo.n_features}</div>
+                            <div className="quick-stat-label">Features</div>
+                        </div>
+                    )}
+                    {modelInfo?.n_classes && (
+                        <div className="quick-stat">
+                            <div className="quick-stat-value">{modelInfo.n_classes}</div>
+                            <div className="quick-stat-label">Classes</div>
+                        </div>
+                    )}
+                    {modelInfo?.n_layers && (
+                        <div className="quick-stat">
+                            <div className="quick-stat-value">{modelInfo.n_layers}</div>
+                            <div className="quick-stat-label">Layers</div>
+                        </div>
+                    )}
+                    {modelInfo?.trainable_params && (
+                        <div className="quick-stat">
+                            <div className="quick-stat-value">
+                                {(modelInfo.trainable_params / 1000000).toFixed(2)}M
+                            </div>
+                            <div className="quick-stat-label">Parameters</div>
+                        </div>
+                    )}
+                </div>
+            </div>
+        </div>
+    )
+
     const renderModelInfo = () => {
-        if (!modelInfo) return <p>Model not loaded. Click "Load Model" to begin.</p>
+        if (!modelInfo) {
+            return (
+                <div className="model-not-loaded">
+                    <h3>Model Not Loaded</h3>
+                    <p>Load the model to see detailed information and run predictions.</p>
+                    <button className="btn btn-primary btn-lg" onClick={loadModel} disabled={loading}>
+                        {loading ? 'Loading...' : '📥 Load Model'}
+                    </button>
+                </div>
+            )
+        }
         
         return (
-            <div className="model-info">
-                <div className="info-grid">
-                    <div className="info-card">
-                        <h4>Framework</h4>
-                        <span className="value">{modelInfo.framework || 'Unknown'}</span>
-                    </div>
-                    <div className="info-card">
-                        <h4>Type</h4>
-                        <span className="value">{modelInfo.class || modelInfo.type || 'Unknown'}</span>
-                    </div>
-                    <div className="info-card">
-                        <h4>Task</h4>
-                        <span className="value">{modelInfo.task || 'Unknown'}</span>
-                    </div>
-                    <div className="info-card">
-                        <h4>File Size</h4>
-                        <span className="value">{modelInfo.file_size_mb} MB</span>
+            <div className="tab-content">
+                <div className="model-info-section">
+                    <h3>📋 Model Architecture</h3>
+                    <div className="info-grid">
+                        <div className="info-card">
+                            <h4>Framework</h4>
+                            <span className="value highlight">{modelInfo.framework || 'Unknown'}</span>
+                        </div>
+                        <div className="info-card">
+                            <h4>Model Type</h4>
+                            <span className="value">{modelInfo.class || modelInfo.type || 'Unknown'}</span>
+                        </div>
+                        <div className="info-card">
+                            <h4>Task</h4>
+                            <span className="value">{modelInfo.task || 'Unknown'}</span>
+                        </div>
+                        <div className="info-card">
+                            <h4>File Size</h4>
+                            <span className="value">{modelInfo.file_size_mb} MB</span>
+                        </div>
+                        {modelInfo.input_shape && (
+                            <div className="info-card">
+                                <h4>Input Shape</h4>
+                                <span className="value">{modelInfo.input_shape}</span>
+                            </div>
+                        )}
+                        {modelInfo.output_shape && (
+                            <div className="info-card">
+                                <h4>Output Shape</h4>
+                                <span className="value">{modelInfo.output_shape}</span>
+                            </div>
+                        )}
                     </div>
                 </div>
 
-                {modelInfo.features && (
-                    <div className="features-section">
-                        <h4>Features ({modelInfo.n_features || modelInfo.features.length})</h4>
+                {modelInfo.features && modelInfo.features.length > 0 && (
+                    <div className="model-info-section">
+                        <h3>📊 Input Features ({modelInfo.features.length})</h3>
                         <div className="features-list">
                             {modelInfo.features.map((f, i) => (
                                 <span key={i} className="feature-tag">{f}</span>
@@ -189,9 +311,9 @@ function ModelPage({ model, onBack }) {
                     </div>
                 )}
 
-                {modelInfo.classes && (
-                    <div className="classes-section">
-                        <h4>Classes ({modelInfo.n_classes})</h4>
+                {modelInfo.classes && modelInfo.classes.length > 0 && (
+                    <div className="model-info-section">
+                        <h3>🏷️ Output Classes ({modelInfo.n_classes})</h3>
                         <div className="classes-list">
                             {modelInfo.classes.map((c, i) => (
                                 <span key={i} className="class-tag">{c}</span>
@@ -200,24 +322,29 @@ function ModelPage({ model, onBack }) {
                     </div>
                 )}
 
-                {modelInfo.layers && (
-                    <div className="layers-section">
-                        <h4>Layers ({modelInfo.n_layers})</h4>
-                        <div className="layers-list">
-                            {modelInfo.layers.map((l, i) => (
-                                <div key={i} className="layer-item">
-                                    <span className="layer-name">{l.name}</span>
-                                    <span className="layer-type">{l.type}</span>
-                                </div>
-                            ))}
-                        </div>
-                    </div>
-                )}
-
-                {modelInfo.params && (
-                    <div className="params-section">
-                        <h4>Parameters</h4>
-                        <pre className="params-json">{JSON.stringify(modelInfo.params, null, 2)}</pre>
+                {modelInfo.layers && modelInfo.layers.length > 0 && (
+                    <div className="model-info-section">
+                        <h3>🧱 Network Layers ({modelInfo.n_layers})</h3>
+                        <table className="layers-table">
+                            <thead>
+                                <tr>
+                                    <th>#</th>
+                                    <th>Name</th>
+                                    <th>Type</th>
+                                    <th>Output Shape</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {modelInfo.layers.map((l, i) => (
+                                    <tr key={i}>
+                                        <td>{i + 1}</td>
+                                        <td>{l.name}</td>
+                                        <td>{l.type}</td>
+                                        <td>{l.output_shape || 'N/A'}</td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
                     </div>
                 )}
             </div>
@@ -225,189 +352,281 @@ function ModelPage({ model, onBack }) {
     }
 
     const renderEvaluation = () => (
-        <div className="evaluation-section">
-            <h3>📊 Model Evaluation</h3>
-            
-            <div className="eval-form">
-                <div className="form-group">
-                    <label>Select Dataset</label>
-                    <select 
-                        value={selectedDataset} 
-                        onChange={(e) => setSelectedDataset(e.target.value)}
-                    >
-                        <option value="">Choose a dataset...</option>
-                        {datasets.map(d => (
-                            <option key={d.id} value={d.id}>{d.filename}</option>
-                        ))}
-                    </select>
+        <div className="tab-content">
+            <div className="evaluation-section">
+                <h3>📊 Model Evaluation</h3>
+                <p style={{color: '#64748b', marginBottom: '1.5rem'}}>
+                    Test your model's performance against a dataset with known labels.
+                </p>
+                
+                <div className="eval-form">
+                    <div className="form-group">
+                        <label>Select Dataset</label>
+                        <select 
+                            value={selectedDataset} 
+                            onChange={(e) => setSelectedDataset(e.target.value)}
+                        >
+                            <option value="">Choose a dataset...</option>
+                            {datasets.map(d => (
+                                <option key={d.id} value={d.id}>{d.filename}</option>
+                            ))}
+                        </select>
+                    </div>
+
+                    <div className="form-group">
+                        <label>Target Column (y)</label>
+                        <input 
+                            type="text"
+                            value={targetColumn}
+                            onChange={(e) => setTargetColumn(e.target.value)}
+                            placeholder="e.g., label, target, class"
+                        />
+                    </div>
+
+                    <div className="form-group" style={{justifyContent: 'flex-end'}}>
+                        <button 
+                            className="btn btn-primary"
+                            onClick={evaluateModel}
+                            disabled={loading || !selectedDataset || !targetColumn}
+                        >
+                            {loading ? '⏳ Evaluating...' : '🎯 Run Evaluation'}
+                        </button>
+                    </div>
                 </div>
 
-                <div className="form-group">
-                    <label>Target Column (y)</label>
-                    <input 
-                        type="text"
-                        value={targetColumn}
-                        onChange={(e) => setTargetColumn(e.target.value)}
-                        placeholder="e.g., label, target, class"
-                    />
-                </div>
+                {evaluation && (
+                    <div className="eval-results">
+                        <h4>📈 Results</h4>
+                        
+                        {/* Classification Metrics */}
+                        {evaluation.accuracy !== undefined && (
+                            <div className="metrics-grid">
+                                <div className="metric-card primary">
+                                    <div className="metric-value">
+                                        {formatMetricValue(evaluation.accuracy)}
+                                    </div>
+                                    <div className="metric-label">Accuracy</div>
+                                </div>
+                                <div className="metric-card">
+                                    <div className="metric-value">
+                                        {formatMetricValue(evaluation.precision)}
+                                    </div>
+                                    <div className="metric-label">Precision</div>
+                                </div>
+                                <div className="metric-card">
+                                    <div className="metric-value">
+                                        {formatMetricValue(evaluation.recall)}
+                                    </div>
+                                    <div className="metric-label">Recall</div>
+                                </div>
+                                <div className="metric-card">
+                                    <div className="metric-value">
+                                        {formatMetricValue(evaluation.f1_score)}
+                                    </div>
+                                    <div className="metric-label">F1 Score</div>
+                                </div>
+                            </div>
+                        )}
 
-                <button 
-                    className="btn-primary"
-                    onClick={evaluateModel}
-                    disabled={loading || !selectedDataset || !targetColumn}
-                >
-                    {loading ? 'Evaluating...' : '🎯 Evaluate Model'}
-                </button>
-            </div>
+                        {/* Regression Metrics */}
+                        {evaluation.r2 !== undefined && (
+                            <div className="metrics-grid">
+                                <div className="metric-card primary">
+                                    <div className="metric-value">
+                                        {formatMetricValue(evaluation.r2, false)}
+                                    </div>
+                                    <div className="metric-label">R² Score</div>
+                                </div>
+                                <div className="metric-card">
+                                    <div className="metric-value">
+                                        {formatMetricValue(evaluation.mse, false)}
+                                    </div>
+                                    <div className="metric-label">MSE</div>
+                                </div>
+                                <div className="metric-card">
+                                    <div className="metric-value">
+                                        {formatMetricValue(evaluation.rmse, false)}
+                                    </div>
+                                    <div className="metric-label">RMSE</div>
+                                </div>
+                                <div className="metric-card">
+                                    <div className="metric-value">
+                                        {formatMetricValue(evaluation.mae, false)}
+                                    </div>
+                                    <div className="metric-label">MAE</div>
+                                </div>
+                            </div>
+                        )}
 
-            {evaluation && (
-                <div className="eval-results">
-                    <h4>Evaluation Results</h4>
-                    
-                    {evaluation.accuracy !== undefined && (
-                        <div className="metrics-grid">
-                            <div className="metric-card accuracy">
-                                <h5>Accuracy</h5>
-                                <span className="metric-value">{(evaluation.accuracy * 100).toFixed(2)}%</span>
-                            </div>
-                            <div className="metric-card">
-                                <h5>Precision</h5>
-                                <span className="metric-value">{(evaluation.precision * 100).toFixed(2)}%</span>
-                            </div>
-                            <div className="metric-card">
-                                <h5>Recall</h5>
-                                <span className="metric-value">{(evaluation.recall * 100).toFixed(2)}%</span>
-                            </div>
-                            <div className="metric-card">
-                                <h5>F1 Score</h5>
-                                <span className="metric-value">{(evaluation.f1_score * 100).toFixed(2)}%</span>
-                            </div>
-                        </div>
-                    )}
-
-                    {evaluation.r2 !== undefined && (
-                        <div className="metrics-grid">
-                            <div className="metric-card">
-                                <h5>R² Score</h5>
-                                <span className="metric-value">{evaluation.r2.toFixed(4)}</span>
-                            </div>
-                            <div className="metric-card">
-                                <h5>MSE</h5>
-                                <span className="metric-value">{evaluation.mse.toFixed(4)}</span>
-                            </div>
-                            <div className="metric-card">
-                                <h5>RMSE</h5>
-                                <span className="metric-value">{evaluation.rmse.toFixed(4)}</span>
-                            </div>
-                            <div className="metric-card">
-                                <h5>MAE</h5>
-                                <span className="metric-value">{evaluation.mae.toFixed(4)}</span>
-                            </div>
-                        </div>
-                    )}
-
-                    {evaluation.confusion_matrix && (
-                        <div className="confusion-matrix">
-                            <h5>Confusion Matrix</h5>
-                            <table>
-                                <tbody>
-                                    {evaluation.confusion_matrix.map((row, i) => (
-                                        <tr key={i}>
-                                            {row.map((cell, j) => (
-                                                <td key={j} className={i === j ? 'diagonal' : ''}>
-                                                    {cell}
-                                                </td>
+                        {/* Confusion Matrix */}
+                        {evaluation.confusion_matrix && (
+                            <div className="confusion-matrix-container">
+                                <h4>Confusion Matrix</h4>
+                                <div className="confusion-matrix">
+                                    <table>
+                                        <tbody>
+                                            {evaluation.confusion_matrix.map((row, i) => (
+                                                <tr key={i}>
+                                                    {row.map((cell, j) => (
+                                                        <td 
+                                                            key={j} 
+                                                            className={i === j ? 'cell-correct' : 'cell-incorrect'}
+                                                        >
+                                                            {cell}
+                                                        </td>
+                                                    ))}
+                                                </tr>
                                             ))}
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
-                        </div>
-                    )}
-                </div>
-            )}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                )}
+            </div>
         </div>
     )
 
     const renderPredictions = () => (
-        <div className="predictions-section">
-            <h3>🔮 Run Predictions</h3>
-            
-            <div className="pred-form">
-                <div className="form-group">
-                    <label>Select Dataset</label>
-                    <select 
-                        value={selectedDataset} 
-                        onChange={(e) => setSelectedDataset(e.target.value)}
-                    >
-                        <option value="">Choose a dataset...</option>
-                        {datasets.map(d => (
-                            <option key={d.id} value={d.id}>{d.filename}</option>
-                        ))}
-                    </select>
-                </div>
+        <div className="tab-content">
+            <div className="predictions-section">
+                <h3>🔮 Make Predictions</h3>
+                <p style={{color: '#64748b', marginBottom: '1.5rem'}}>
+                    Use your model to make predictions on new data.
+                </p>
 
-                <button 
-                    className="btn-primary"
-                    onClick={predictFromDataset}
-                    disabled={loading || !selectedDataset}
-                >
-                    {loading ? 'Predicting...' : '🚀 Run Predictions'}
-                </button>
-            </div>
+                {/* Custom Input Form */}
+                {modelInfo?.features && modelInfo.features.length > 0 && (
+                    <div className="custom-predict-form">
+                        <h4>Single Prediction</h4>
+                        <div className="input-grid">
+                            {modelInfo.features.map((feature, i) => (
+                                <div key={i} className="input-field">
+                                    <label>{feature}</label>
+                                    <input
+                                        type="text"
+                                        value={customInput[feature] || ''}
+                                        onChange={(e) => setCustomInput({
+                                            ...customInput,
+                                            [feature]: e.target.value
+                                        })}
+                                        placeholder="Enter value"
+                                    />
+                                </div>
+                            ))}
+                        </div>
+                        <button 
+                            className="btn btn-primary"
+                            onClick={predictSingle}
+                            disabled={loading}
+                        >
+                            {loading ? '⏳ Predicting...' : '🎯 Predict'}
+                        </button>
+                    </div>
+                )}
+                
+                {/* Batch Prediction from Dataset */}
+                <div className="eval-form" style={{marginTop: '1.5rem'}}>
+                    <div className="form-group">
+                        <label>Batch Predict from Dataset</label>
+                        <select 
+                            value={selectedDataset} 
+                            onChange={(e) => setSelectedDataset(e.target.value)}
+                        >
+                            <option value="">Choose a dataset...</option>
+                            {datasets.map(d => (
+                                <option key={d.id} value={d.id}>{d.filename}</option>
+                            ))}
+                        </select>
+                    </div>
 
-            {predictions && (
-                <div className="pred-results">
-                    <h4>Prediction Results ({predictions.n_samples} samples)</h4>
-                    
-                    {predictions.confidence && (
-                        <p className="confidence">
-                            Average Confidence: <strong>{(predictions.confidence * 100).toFixed(2)}%</strong>
-                        </p>
-                    )}
-                    
-                    <div className="predictions-table-wrapper">
-                        <table className="predictions-table">
-                            <thead>
-                                <tr>
-                                    <th>#</th>
-                                    <th>Prediction</th>
-                                    {predictions.probabilities && <th>Probability</th>}
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {predictions.predictions.slice(0, 20).map((pred, i) => (
-                                    <tr key={i}>
-                                        <td>{i + 1}</td>
-                                        <td>{String(pred)}</td>
-                                        {predictions.probabilities && (
-                                            <td>
-                                                {(Math.max(...predictions.probabilities[i]) * 100).toFixed(1)}%
-                                            </td>
-                                        )}
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                        {predictions.predictions.length > 20 && (
-                            <p className="more-results">...and {predictions.predictions.length - 20} more</p>
-                        )}
+                    <div className="form-group" style={{justifyContent: 'flex-end'}}>
+                        <button 
+                            className="btn btn-primary"
+                            onClick={predictFromDataset}
+                            disabled={loading || !selectedDataset}
+                        >
+                            {loading ? '⏳ Predicting...' : '🚀 Run Batch Predictions'}
+                        </button>
                     </div>
                 </div>
-            )}
+
+                {/* Predictions Results */}
+                {predictions && (
+                    <div className="eval-results" style={{marginTop: '1.5rem'}}>
+                        <h4>📊 Prediction Results</h4>
+                        
+                        {predictions.n_samples && (
+                            <p style={{color: '#64748b', marginBottom: '1rem'}}>
+                                Generated {predictions.n_samples} predictions
+                                {predictions.confidence && (
+                                    <> • Average confidence: <strong>{formatMetricValue(predictions.confidence)}</strong></>
+                                )}
+                            </p>
+                        )}
+                        
+                        <div className="predictions-table-container">
+                            <table className="predictions-table">
+                                <thead>
+                                    <tr>
+                                        <th>#</th>
+                                        <th>Prediction</th>
+                                        {predictions.probabilities && <th>Confidence</th>}
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {predictions.predictions?.slice(0, 25).map((pred, i) => (
+                                        <tr key={i}>
+                                            <td>{i + 1}</td>
+                                            <td>
+                                                <span className={`prediction-badge class-${i % 4}`}>
+                                                    {String(pred)}
+                                                </span>
+                                            </td>
+                                            {predictions.probabilities && predictions.probabilities[i] && (
+                                                <td>
+                                                    <div className="probability-bar">
+                                                        <div 
+                                                            className="prob-fill" 
+                                                            style={{
+                                                                width: `${Math.max(...predictions.probabilities[i]) * 100}%`
+                                                            }}
+                                                        />
+                                                        <span className="prob-value">
+                                                            {(Math.max(...predictions.probabilities[i]) * 100).toFixed(1)}%
+                                                        </span>
+                                                    </div>
+                                                </td>
+                                            )}
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                            {predictions.predictions?.length > 25 && (
+                                <p style={{
+                                    textAlign: 'center', 
+                                    color: '#94a3b8', 
+                                    marginTop: '1rem',
+                                    fontSize: '0.9rem'
+                                }}>
+                                    Showing 25 of {predictions.predictions.length} predictions
+                                </p>
+                            )}
+                        </div>
+                    </div>
+                )}
+            </div>
         </div>
     )
 
     return (
         <div className="model-page">
-            <header className="page-header">
-                <button onClick={onBack} className="btn-secondary">← Back</button>
-                <div className="header-content">
-                    <h1>🤖 {model.filename}</h1>
-                    <span className="model-type">{model.metadata?.model_type || 'ML Model'}</span>
-                </div>
-            </header>
+            <button onClick={onBack} className="back-btn">
+                ← Back to Upload
+            </button>
+
+            {renderModelHeader()}
 
             {error && (
                 <div className="error-banner">
@@ -419,19 +638,22 @@ function ModelPage({ model, onBack }) {
             <div className="model-actions">
                 {modelInfo?.status !== 'loaded' && (
                     <button 
-                        className="btn-primary"
+                        className="btn btn-primary btn-lg"
                         onClick={loadModel}
                         disabled={loading}
                     >
-                        {loading ? 'Loading...' : '📥 Load Model'}
+                        {loading ? '⏳ Loading...' : '📥 Load Model into Memory'}
                     </button>
                 )}
                 {modelInfo?.status === 'loaded' && (
-                    <span className="loaded-badge">✅ Model Loaded</span>
+                    <div className="loaded-indicator">
+                        <span className="dot"></span>
+                        Model Ready
+                    </div>
                 )}
             </div>
 
-            <div className="tabs">
+            <div className="model-tabs">
                 <button 
                     className={activeTab === 'info' ? 'active' : ''} 
                     onClick={() => setActiveTab('info')}
@@ -454,11 +676,16 @@ function ModelPage({ model, onBack }) {
                 </button>
             </div>
 
-            <div className="tab-content">
-                {activeTab === 'info' && renderModelInfo()}
-                {activeTab === 'evaluate' && renderEvaluation()}
-                {activeTab === 'predict' && renderPredictions()}
-            </div>
+            {loading && activeTab !== 'info' && (
+                <div className="loading-overlay">
+                    <div className="spinner"></div>
+                    <p>Processing...</p>
+                </div>
+            )}
+
+            {activeTab === 'info' && renderModelInfo()}
+            {activeTab === 'evaluate' && renderEvaluation()}
+            {activeTab === 'predict' && renderPredictions()}
         </div>
     )
 }

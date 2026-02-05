@@ -5,7 +5,7 @@ import './UploadPage.css'
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000/api'
 
 function UploadPage({ datasets, onUploadComplete, onAnalyzeStart, onAnalyzeComplete, onViewProfile, onDeleteDataset }) {
-    const { sessionId } = useSession()
+    const { sessionId, ensureSession, loading: sessionLoading } = useSession()
     const [dragActive, setDragActive] = useState(false)
     const [uploading, setUploading] = useState(false)
     const [analyzing, setAnalyzing] = useState(false)
@@ -41,19 +41,33 @@ function UploadPage({ datasets, onUploadComplete, onAnalyzeStart, onAnalyzeCompl
         })
 
         try {
+            // Ensure we have a session before uploading
+            const currentSession = await ensureSession()
+            
+            if (!currentSession) {
+                throw new Error("Failed to create session")
+            }
+            
+            console.log('Uploading with session:', currentSession)
+            
             const res = await fetch(`${API_BASE}/upload`, {
                 method: 'POST',
                 headers: {
-                    'x-session-id': sessionId
+                    'x-session-id': currentSession
                 },
                 body: formData
             })
 
-            if (!res.ok) throw new Error("Upload failed")
+            if (!res.ok) {
+                const errorData = await res.json().catch(() => ({}))
+                throw new Error(errorData.detail || "Upload failed")
+            }
 
             const data = await res.json()
+            console.log('Upload response:', data)
             onUploadComplete([...datasets, ...data.datasets])
         } catch (err) {
+            console.error('Upload error:', err)
             setError(err.message)
         } finally {
             setUploading(false)

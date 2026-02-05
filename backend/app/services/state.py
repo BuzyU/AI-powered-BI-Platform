@@ -60,6 +60,7 @@ class SessionState:
         self.analysis: Optional[Dict[str, Any]] = None
         self.linkage_report: Optional[Dict[str, Any]] = None
         self.dashboard_config: Optional[Dict[str, Any]] = None
+        self.evaluation_results: Optional[Dict[str, Any]] = None  # Model evaluation
         
         # Chat/Q&A
         self.chat_history: List[Dict[str, Any]] = []
@@ -111,6 +112,7 @@ class SessionState:
             "analysis": self.analysis,
             "linkage_report": self.linkage_report,
             "dashboard_config": self.dashboard_config,
+            "evaluation_results": self.evaluation_results,
             "chat_history": self.chat_history,
             "created_at": self.created_at,
             "updated_at": self.updated_at,
@@ -533,3 +535,30 @@ def get_memory_usage() -> Dict[str, Any]:
         "estimated_memory_bytes": memory_estimate,
         "estimated_memory_mb": round(memory_estimate / (1024 * 1024), 2)
     }
+
+
+# ============== MODEL EVALUATION STATE ==============
+
+def store_evaluation(session_id: str, evaluation: Dict[str, Any]):
+    """Store model evaluation results in session."""
+    session = get_session(session_id)
+    session.evaluation_results = evaluation
+    session.update_timestamp()
+    _persist_session_metadata(session)
+    
+    # Also clear dashboard config to trigger regeneration with new data
+    session.dashboard_config = None
+
+
+def get_evaluation(session_id: str) -> Optional[Dict[str, Any]]:
+    """Get model evaluation results for a session."""
+    session = get_session(session_id)
+    return session.evaluation_results
+
+
+def clear_evaluation(session_id: str):
+    """Clear evaluation results from session."""
+    session = get_session(session_id)
+    session.evaluation_results = None
+    session.update_timestamp()
+    _persist_session_metadata(session)

@@ -15,7 +15,7 @@ class Settings(BaseSettings):
     )
     
     # Application
-    APP_NAME: str = "BI Intelligence Platform"
+    APP_NAME: str = "Sustainable Pronto"
     APP_VERSION: str = "1.0.0"
     DEBUG: bool = False
     API_V1_PREFIX: str = "/api/v1"

@@ -1,6 +1,6 @@
-# AI-Powered BI Platform
+# 🌿 Sustainable Pronto
 
-An intelligent, full-stack Business Intelligence platform that transforms raw data into actionable insights using AI and **adaptive dashboards** that completely change based on WHO is using it.
+An intelligent, AI-powered sustainability analytics platform that transforms raw data into actionable insights using AI and **adaptive dashboards** that completely change based on WHO is using it.
 
 ## Key Features
 

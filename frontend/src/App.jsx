@@ -5,7 +5,7 @@ import './App.css'
 
 // Pages
 import UploadPage from './pages/UploadPage'
-import AdaptiveDashboard from './pages/AdaptiveDashboard'
+import EnhancedDashboard from './pages/EnhancedDashboard'
 import ProfilePage from './pages/ProfilePage'
 import ChatPage from './pages/ChatPage'
 import ModelPage from './pages/ModelPage'
@@ -127,7 +127,7 @@ function MainApp() {
         )
       case 'dashboard':
         return (
-          <AdaptiveDashboard />
+          <EnhancedDashboard />
         )
       case 'chat':
         return <ChatPage />

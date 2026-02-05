@@ -2,6 +2,9 @@
 from supabase import create_client, Client
 from app.config import settings
 import os
+import logging
+
+logger = logging.getLogger(__name__)
 
 # Supabase credentials
 SUPABASE_URL = os.getenv("SUPABASE_URL", "https://aivlfocxshysxxcxxkae.supabase.co")
@@ -10,6 +13,9 @@ SUPABASE_SERVICE_KEY = os.getenv("SUPABASE_SERVICE_KEY", "")  # Add service role
 
 # Create Supabase client
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_ANON_KEY)
+
+# Log connection status
+logger.info(f"Supabase client initialized for: {SUPABASE_URL}")
 
 
 def get_supabase_client() -> Client:
@@ -24,39 +30,140 @@ def get_admin_client() -> Client:
     return supabase
 
 
+def check_supabase_connection() -> dict:
+    """Check if Supabase connection is working."""
+    try:
+        # Try to list buckets to verify connection
+        buckets = supabase.storage.list_buckets()
+        bucket_names = [b.name for b in buckets] if buckets else []
+        return {
+            "connected": True,
+            "url": SUPABASE_URL,
+            "buckets": bucket_names
+        }
+    except Exception as e:
+        return {
+            "connected": False,
+            "url": SUPABASE_URL,
+            "error": str(e)
+        }
+
+
 # Storage helpers
 class SupabaseStorage:
     """Helper class for Supabase storage operations."""
     
     BUCKET_NAME = "bi-uploads"
     
+    # Content type mapping for different file types
+    # NOTE: Supabase bucket may restrict MIME types - model files (.h5, .onnx, .pkl)
+    # might fail upload if bucket doesn't allow binary/application types
+    # CSV files typically work with text/csv
+    CONTENT_TYPES = {
+        'csv': 'text/csv',
+        'json': 'application/json',
+        'xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        'xls': 'application/vnd.ms-excel',
+        'pkl': 'text/plain',  # Workaround for Supabase MIME restrictions
+        'pickle': 'text/plain',
+        'h5': 'text/plain',  # Workaround for Supabase MIME restrictions
+        'hdf5': 'text/plain',
+        'onnx': 'text/plain',
+        'pt': 'text/plain',
+        'pth': 'text/plain',
+        'joblib': 'text/plain',
+    }
+    
+    # Supabase Free tier file size limit (50MB)
+    MAX_FILE_SIZE = 50 * 1024 * 1024  # 50MB in bytes
+    
     @staticmethod
-    async def upload_file(file_path: str, file_content: bytes, content_type: str = "application/octet-stream") -> dict:
-        """Upload file to Supabase storage."""
+    def get_content_type(filename: str) -> str:
+        """Get content type based on file extension."""
+        ext = filename.rsplit('.', 1)[-1].lower() if '.' in filename else ''
+        return SupabaseStorage.CONTENT_TYPES.get(ext, 'application/octet-stream')
+    
+    @staticmethod
+    def upload_file(file_path: str, file_content: bytes, content_type: str = None) -> dict:
+        """Upload file to Supabase storage (synchronous)."""
         try:
+            file_size = len(file_content)
+            file_size_mb = file_size / (1024 * 1024)
+            
+            # Check file size limit
+            if file_size > SupabaseStorage.MAX_FILE_SIZE:
+                logger.warning(f"File too large for Supabase: {file_size_mb:.2f}MB (max 50MB). Skipping cloud upload.")
+                return {
+                    "success": False, 
+                    "error": f"File too large ({file_size_mb:.2f}MB). Supabase limit is 50MB. File saved locally only.",
+                    "skipped": True
+                }
+            
+            # Auto-detect content type if not provided
+            if content_type is None:
+                content_type = SupabaseStorage.get_content_type(file_path)
+            
+            logger.info(f"Uploading to Supabase: {file_path} ({content_type})")
+            logger.info(f"Content size: {file_size_mb:.2f}MB")
+            
+            # Check if file already exists and remove it first (upsert behavior)
+            try:
+                supabase.storage.from_(SupabaseStorage.BUCKET_NAME).remove([file_path])
+                logger.info(f"Removed existing file: {file_path}")
+            except Exception as rm_err:
+                logger.debug(f"No existing file to remove: {rm_err}")
+            
             response = supabase.storage.from_(SupabaseStorage.BUCKET_NAME).upload(
-                file_path,
-                file_content,
-                {"content-type": content_type}
+                path=file_path,
+                file=file_content,
+                file_options={"content-type": content_type, "upsert": "true"}
             )
-            return {"success": True, "path": file_path, "data": response}
+            
+            logger.info(f"Supabase upload SUCCESS: {file_path}")
+            
+            # Get the public URL
+            try:
+                public_url = supabase.storage.from_(SupabaseStorage.BUCKET_NAME).get_public_url(file_path)
+                logger.info(f"File available at: {public_url}")
+            except:
+                public_url = None
+            
+            return {
+                "success": True, 
+                "path": file_path, 
+                "data": str(response),
+                "public_url": public_url
+            }
         except Exception as e:
+            import traceback
+            logger.error(f"Supabase upload failed: {e}")
+            traceback.print_exc()
             return {"success": False, "error": str(e)}
     
     @staticmethod
-    async def download_file(file_path: str) -> bytes:
+    async def upload_file_async(file_path: str, file_content: bytes, content_type: str = None) -> dict:
+        """Async wrapper for upload_file."""
+        import asyncio
+        loop = asyncio.get_event_loop()
+        return await loop.run_in_executor(
+            None, 
+            lambda: SupabaseStorage.upload_file(file_path, file_content, content_type)
+        )
+    
+    @staticmethod
+    def download_file(file_path: str) -> bytes:
         """Download file from Supabase storage."""
         response = supabase.storage.from_(SupabaseStorage.BUCKET_NAME).download(file_path)
         return response
     
     @staticmethod
-    async def get_public_url(file_path: str) -> str:
+    def get_public_url(file_path: str) -> str:
         """Get public URL for a file."""
         response = supabase.storage.from_(SupabaseStorage.BUCKET_NAME).get_public_url(file_path)
         return response
     
     @staticmethod
-    async def delete_file(file_path: str) -> dict:
+    def delete_file(file_path: str) -> dict:
         """Delete file from Supabase storage."""
         try:
             response = supabase.storage.from_(SupabaseStorage.BUCKET_NAME).remove([file_path])
@@ -65,7 +172,7 @@ class SupabaseStorage:
             return {"success": False, "error": str(e)}
     
     @staticmethod
-    async def list_files(folder: str = "") -> list:
+    def list_files(folder: str = "") -> list:
         """List files in a folder."""
         response = supabase.storage.from_(SupabaseStorage.BUCKET_NAME).list(folder)
         return response

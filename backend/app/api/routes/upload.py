@@ -20,15 +20,17 @@ from app.services import state
 from app.layers.l2_classification.content_classifier import SmartContentClassifier
 from app.layers.l5_relationship.linkage_validator import LinkageValidator
 
+logger = logging.getLogger(__name__)
+
 # Supabase integration
 try:
-    from app.db.supabase_client import supabase, SupabaseStorage, SupabaseDB
+    from app.db.supabase_client import supabase, SupabaseStorage, SupabaseDB, check_supabase_connection
     SUPABASE_ENABLED = True
+    logger.info("Supabase integration enabled")
 except Exception as e:
     SUPABASE_ENABLED = False
-    print(f"Supabase not available: {e}")
-
-logger = logging.getLogger(__name__)
+    check_supabase_connection = None
+    logger.warning(f"Supabase not available: {e}")
 
 router = APIRouter()
 
@@ -88,6 +90,77 @@ async def update_session_name_route(session_id: str, body: Dict[str, Any] = Body
     return {"success": True}
 
 
+# ============== SUPABASE DEBUG ROUTES ==============
+
+@router.get("/supabase/status")
+async def get_supabase_status():
+    """Check Supabase connection status and bucket availability."""
+    if not SUPABASE_ENABLED:
+        return {
+            "enabled": False,
+            "error": "Supabase integration not available"
+        }
+    
+    try:
+        connection_info = check_supabase_connection()
+        
+        # Check if our bucket exists
+        bucket_exists = "bi-uploads" in connection_info.get("buckets", [])
+        
+        return {
+            "enabled": True,
+            "connected": connection_info.get("connected", False),
+            "url": connection_info.get("url"),
+            "buckets": connection_info.get("buckets", []),
+            "bi_uploads_bucket": bucket_exists,
+            "error": connection_info.get("error")
+        }
+    except Exception as e:
+        return {
+            "enabled": True,
+            "connected": False,
+            "error": str(e)
+        }
+
+
+@router.post("/supabase/test-upload")
+async def test_supabase_upload():
+    """Test upload to Supabase storage with a small test file."""
+    if not SUPABASE_ENABLED:
+        return {"success": False, "error": "Supabase not enabled"}
+    
+    try:
+        # Create a small test file
+        test_content = b"test,data\n1,2\n3,4"
+        test_path = "test/connection_test.csv"
+        
+        result = SupabaseStorage.upload_file(test_path, test_content, "text/csv")
+        
+        if result.get("success"):
+            # Try to get public URL
+            try:
+                url = SupabaseStorage.get_public_url(test_path)
+                result["public_url"] = url
+            except:
+                pass
+            
+            # Clean up test file
+            try:
+                SupabaseStorage.delete_file(test_path)
+                result["cleaned_up"] = True
+            except:
+                result["cleaned_up"] = False
+        
+        return result
+    except Exception as e:
+        import traceback
+        return {
+            "success": False,
+            "error": str(e),
+            "traceback": traceback.format_exc()
+        }
+
+
 # ============== UPLOAD ROUTES ==============
 
 @router.post("/upload")
@@ -128,11 +201,13 @@ async def upload_files(
         if SUPABASE_ENABLED:
             try:
                 storage_path = f"{session_id}/{dataset_id}.{ext}"
-                content_type = "text/csv" if ext == "csv" else "application/octet-stream"
-                upload_result = await SupabaseStorage.upload_file(storage_path, content, content_type)
+                # Use auto-detected content type based on extension
+                upload_result = SupabaseStorage.upload_file(storage_path, content)
                 if upload_result.get("success"):
                     supabase_path = storage_path
                     logger.info(f"Uploaded to Supabase: {storage_path}")
+                else:
+                    logger.warning(f"Supabase upload returned error: {upload_result.get('error')}")
             except Exception as e:
                 logger.warning(f"Supabase upload failed (continuing with local): {e}")
         
@@ -333,22 +408,49 @@ async def get_linkage_report(x_session_id: str = Header("default_session")):
 
 @router.delete("/datasets/{dataset_id}")
 async def delete_dataset(dataset_id: str, x_session_id: str = Header("default_session")):
-    """Delete a dataset from the session."""
+    """Delete a dataset from the session and Supabase storage/database."""
     try:
+        # Get dataset info before deletion to retrieve supabase_path
+        dataset_info = state.get_dataset(x_session_id, dataset_id)
+        supabase_path = dataset_info.get('supabase_path') if dataset_info else None
+        
         # Remove from state
         success = state.delete_dataset(x_session_id, dataset_id)
         if not success:
             raise HTTPException(404, "Dataset not found")
         
-        # Try to delete the file as well
+        # Delete from local storage
         session_dir = UPLOAD_DIR / x_session_id
         for ext in ALLOWED_EXTENSIONS:
             file_path = session_dir / f"{dataset_id}.{ext}"
             if file_path.exists():
                 file_path.unlink()
+                logger.info(f"Deleted local file: {file_path}")
                 break
         
-        return {"success": True, "message": "Dataset deleted"}
+        # Delete from Supabase Storage (cloud)
+        if SUPABASE_ENABLED and supabase_path:
+            try:
+                storage_result = SupabaseStorage.delete_file(supabase_path)
+                if storage_result.get('success'):
+                    logger.info(f"Deleted from Supabase storage: {supabase_path}")
+                else:
+                    logger.warning(f"Failed to delete from Supabase storage: {storage_result.get('error')}")
+            except Exception as e:
+                logger.warning(f"Supabase storage deletion error: {e}")
+        
+        # Delete from Supabase Database
+        if SUPABASE_ENABLED:
+            try:
+                from app.db.supabase_client import SupabaseDB
+                await SupabaseDB.delete('datasets', {'id': dataset_id})
+                logger.info(f"Deleted from Supabase database: {dataset_id}")
+            except Exception as e:
+                logger.warning(f"Supabase DB deletion error: {e}")
+        
+        return {"success": True, "message": "Dataset deleted from all storage locations"}
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error deleting dataset: {e}")
         raise HTTPException(500, f"Failed to delete dataset: {str(e)}")
