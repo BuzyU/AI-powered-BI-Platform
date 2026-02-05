@@ -102,12 +102,16 @@ class ModelService:
         with open(path, 'rb') as f:
             model = pickle.load(f)
         
-        # Validate it's likely a model
+        # Strict Validation against non-model types
+        if isinstance(model, (dict, list, tuple, set, str, bytes, int, float, bool)):
+             raise ValueError(f"Uploaded file contains a primitive type ({type(model).__name__}), not a scikit-learn model.")
+        
+        if isinstance(model, (np.ndarray, pd.DataFrame, pd.Series)):
+             raise ValueError(f"Uploaded file contains a {type(model).__name__}, not a model. Please upload the trained model object.")
+
+        # Validate it works like a model
         if not hasattr(model, 'predict') and not hasattr(model, 'predict_proba'):
-            # Check if it's a dataframe/series
-            if hasattr(model, 'columns') or hasattr(model, 'name'):
-                raise ValueError("Uploaded file appears to be a dataset (DataFrame), not a model. Please upload a valid .pkl model file.")
-            raise ValueError(f"Uploaded object {type(model).__name__} does not have a 'predict' method. Ensure it is a valid scikit-learn model.")
+             raise ValueError(f"Uploaded object {type(model).__name__} does not have a 'predict' method. Ensure it is a valid scikit-learn model.")
 
         info = {
             'framework': 'scikit-learn',
@@ -135,6 +139,14 @@ class ModelService:
         
         if hasattr(model, 'n_features_in_'):
             info['n_features'] = model.n_features_in_
+            
+        # Check for Pipeline
+        if type(model).__name__ == 'Pipeline':
+            info['is_pipeline'] = True
+            info['preprocessing'] = 'internal'
+        else:
+            info['is_pipeline'] = False
+            info['preprocessing'] = 'external'
             
         return model, info
     
@@ -277,6 +289,15 @@ class ModelService:
         framework = metadata.get('framework', '')
         
         try:
+            # Strict Feature Validation
+            if hasattr(model, 'n_features_in_') and X.shape[1] != model.n_features_in_:
+                raise ValueError(f"Feature mismatch: Model expects {model.n_features_in_} features, but input has {X.shape[1]}.")
+            
+            if hasattr(model, 'feature_names_in_') and feature_names:
+                missing_features = [f for f in model.feature_names_in_ if f not in feature_names]
+                if missing_features:
+                    raise ValueError(f"Missing features: {', '.join(missing_features[:5])}{'...' if len(missing_features) > 5 else ''}")
+
             if 'sklearn' in framework or 'pickle' in framework or 'scikit-learn' in framework:
                 return self._predict_sklearn(model, X, metadata)
             elif 'keras' in framework or 'tensorflow' in framework:

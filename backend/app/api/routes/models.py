@@ -131,7 +131,10 @@ async def predict(
     result = model_service.predict(model_id, data)
     
     if 'error' in result:
-        raise HTTPException(500, result['error'])
+        err_msg = result['error']
+        if "Feature mismatch" in err_msg or "Missing features" in err_msg:
+             raise HTTPException(400, err_msg)
+        raise HTTPException(500, err_msg)
     
     return result
 
@@ -186,7 +189,10 @@ async def predict_from_dataset(
     result = model_service.predict(model_id, X)
     
     if 'error' in result:
-        raise HTTPException(500, result['error'])
+        err_msg = result['error']
+        if "Feature mismatch" in err_msg or "Missing features" in err_msg:
+             raise HTTPException(400, err_msg)
+        raise HTTPException(500, err_msg)
     
     result['dataset_id'] = dataset_id
     result['feature_columns'] = X.columns.tolist()
@@ -497,11 +503,15 @@ async def evaluate_model_with_file(
         
         if dataset.get('metadata', {}).get('is_model'):
             file_path = dataset.get('file_path')
-            model_service.load_model(file_path, model_id)
+            load_result = model_service.load_model(file_path, model_id)
+            
+            if load_result.get('status') == 'error':
+                 raise HTTPException(400, load_result.get('error', f"Failed to load model {model_id}"))
+            
             info = model_service.get_model_info(model_id)
         
         if not info:
-            raise HTTPException(400, f"Failed to load model {model_id}")
+            raise HTTPException(400, f"Failed to load model {model_id} - unknown error")
     
     # Read test data
     content = await file.read()
@@ -539,7 +549,10 @@ async def evaluate_model_with_file(
     result = model_service.predict(model_id, X)
     
     if 'error' in result:
-        raise HTTPException(500, result['error'])
+        err_msg = result['error']
+        if "Feature mismatch" in err_msg or "Missing features" in err_msg:
+             raise HTTPException(400, err_msg)
+        raise HTTPException(500, err_msg)
     
     # If we have true labels, compute metrics
     if y_true is not None:
