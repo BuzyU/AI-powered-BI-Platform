@@ -38,21 +38,21 @@ function ModelPage({ model, onBack }) {
     const loadModel = async () => {
         setLoading(true)
         setError(null)
-        
+
         try {
             const res = await fetch(`${API_BASE}/models/${model.id}/load`, {
                 method: 'POST',
                 headers: { 'x-session-id': sessionId }
             })
-            
+
             if (!res.ok) {
                 const err = await res.json()
                 throw new Error(err.detail || 'Failed to load model')
             }
-            
+
             const data = await res.json()
             setModelInfo(data)
-            
+
             // Initialize custom input fields
             if (data.features) {
                 const initialInput = {}
@@ -66,27 +66,38 @@ function ModelPage({ model, onBack }) {
         }
     }
 
-    // Get model info on mount
+    // Get model info on mount, auto-load if needed
     useEffect(() => {
-        const getModelInfo = async () => {
+        const initModel = async () => {
             try {
+                // Try to get info first
                 const res = await fetch(`${API_BASE}/models/${model.id}`, {
                     headers: { 'x-session-id': sessionId }
                 })
+
                 if (res.ok) {
                     const data = await res.json()
                     setModelInfo(data)
-                    if (data.features) {
+
+                    // If status is 'not_loaded', allow manual load or auto-load
+                    if (data.status === 'not_loaded') {
+                        await loadModel()
+                    } else if (data.features) {
                         const initialInput = {}
                         data.features.forEach(f => { initialInput[f] = '' })
                         setCustomInput(initialInput)
                     }
+                } else {
+                    // Not found or error -> Try loading it
+                    await loadModel()
                 }
             } catch (err) {
-                console.error('Failed to get model info:', err)
+                console.error('Failed to init model:', err)
+                // Fallback attempt to load
+                await loadModel()
             }
         }
-        getModelInfo()
+        initModel()
     }, [model.id, sessionId])
 
     // Evaluate model
@@ -215,10 +226,10 @@ function ModelPage({ model, onBack }) {
                     </span>
                 </h1>
                 <p className="model-file">
-                    {model.metadata?.file_size_mb || modelInfo?.file_size_mb || '?'} MB • 
+                    {model.metadata?.file_size_mb || modelInfo?.file_size_mb || '?'} MB •
                     {modelInfo?.task || 'Unknown Task'}
                 </p>
-                
+
                 <div className="model-quick-stats">
                     {modelInfo?.n_features && (
                         <div className="quick-stat">
@@ -263,7 +274,7 @@ function ModelPage({ model, onBack }) {
                 </div>
             )
         }
-        
+
         return (
             <div className="tab-content">
                 <div className="model-info-section">
@@ -355,15 +366,15 @@ function ModelPage({ model, onBack }) {
         <div className="tab-content">
             <div className="evaluation-section">
                 <h3>📊 Model Evaluation</h3>
-                <p style={{color: '#64748b', marginBottom: '1.5rem'}}>
+                <p style={{ color: '#64748b', marginBottom: '1.5rem' }}>
                     Test your model's performance against a dataset with known labels.
                 </p>
-                
+
                 <div className="eval-form">
                     <div className="form-group">
                         <label>Select Dataset</label>
-                        <select 
-                            value={selectedDataset} 
+                        <select
+                            value={selectedDataset}
                             onChange={(e) => setSelectedDataset(e.target.value)}
                         >
                             <option value="">Choose a dataset...</option>
@@ -375,7 +386,7 @@ function ModelPage({ model, onBack }) {
 
                     <div className="form-group">
                         <label>Target Column (y)</label>
-                        <input 
+                        <input
                             type="text"
                             value={targetColumn}
                             onChange={(e) => setTargetColumn(e.target.value)}
@@ -383,8 +394,8 @@ function ModelPage({ model, onBack }) {
                         />
                     </div>
 
-                    <div className="form-group" style={{justifyContent: 'flex-end'}}>
-                        <button 
+                    <div className="form-group" style={{ justifyContent: 'flex-end' }}>
+                        <button
                             className="btn btn-primary"
                             onClick={evaluateModel}
                             disabled={loading || !selectedDataset || !targetColumn}
@@ -397,7 +408,7 @@ function ModelPage({ model, onBack }) {
                 {evaluation && (
                     <div className="eval-results">
                         <h4>📈 Results</h4>
-                        
+
                         {/* Classification Metrics */}
                         {evaluation.accuracy !== undefined && (
                             <div className="metrics-grid">
@@ -468,8 +479,8 @@ function ModelPage({ model, onBack }) {
                                             {evaluation.confusion_matrix.map((row, i) => (
                                                 <tr key={i}>
                                                     {row.map((cell, j) => (
-                                                        <td 
-                                                            key={j} 
+                                                        <td
+                                                            key={j}
                                                             className={i === j ? 'cell-correct' : 'cell-incorrect'}
                                                         >
                                                             {cell}
@@ -492,7 +503,7 @@ function ModelPage({ model, onBack }) {
         <div className="tab-content">
             <div className="predictions-section">
                 <h3>🔮 Make Predictions</h3>
-                <p style={{color: '#64748b', marginBottom: '1.5rem'}}>
+                <p style={{ color: '#64748b', marginBottom: '1.5rem' }}>
                     Use your model to make predictions on new data.
                 </p>
 
@@ -516,7 +527,7 @@ function ModelPage({ model, onBack }) {
                                 </div>
                             ))}
                         </div>
-                        <button 
+                        <button
                             className="btn btn-primary"
                             onClick={predictSingle}
                             disabled={loading}
@@ -525,13 +536,13 @@ function ModelPage({ model, onBack }) {
                         </button>
                     </div>
                 )}
-                
+
                 {/* Batch Prediction from Dataset */}
-                <div className="eval-form" style={{marginTop: '1.5rem'}}>
+                <div className="eval-form" style={{ marginTop: '1.5rem' }}>
                     <div className="form-group">
                         <label>Batch Predict from Dataset</label>
-                        <select 
-                            value={selectedDataset} 
+                        <select
+                            value={selectedDataset}
                             onChange={(e) => setSelectedDataset(e.target.value)}
                         >
                             <option value="">Choose a dataset...</option>
@@ -541,8 +552,8 @@ function ModelPage({ model, onBack }) {
                         </select>
                     </div>
 
-                    <div className="form-group" style={{justifyContent: 'flex-end'}}>
-                        <button 
+                    <div className="form-group" style={{ justifyContent: 'flex-end' }}>
+                        <button
                             className="btn btn-primary"
                             onClick={predictFromDataset}
                             disabled={loading || !selectedDataset}
@@ -554,18 +565,18 @@ function ModelPage({ model, onBack }) {
 
                 {/* Predictions Results */}
                 {predictions && (
-                    <div className="eval-results" style={{marginTop: '1.5rem'}}>
+                    <div className="eval-results" style={{ marginTop: '1.5rem' }}>
                         <h4>📊 Prediction Results</h4>
-                        
+
                         {predictions.n_samples && (
-                            <p style={{color: '#64748b', marginBottom: '1rem'}}>
+                            <p style={{ color: '#64748b', marginBottom: '1rem' }}>
                                 Generated {predictions.n_samples} predictions
                                 {predictions.confidence && (
                                     <> • Average confidence: <strong>{formatMetricValue(predictions.confidence)}</strong></>
                                 )}
                             </p>
                         )}
-                        
+
                         <div className="predictions-table-container">
                             <table className="predictions-table">
                                 <thead>
@@ -587,8 +598,8 @@ function ModelPage({ model, onBack }) {
                                             {predictions.probabilities && predictions.probabilities[i] && (
                                                 <td>
                                                     <div className="probability-bar">
-                                                        <div 
-                                                            className="prob-fill" 
+                                                        <div
+                                                            className="prob-fill"
                                                             style={{
                                                                 width: `${Math.max(...predictions.probabilities[i]) * 100}%`
                                                             }}
@@ -605,8 +616,8 @@ function ModelPage({ model, onBack }) {
                             </table>
                             {predictions.predictions?.length > 25 && (
                                 <p style={{
-                                    textAlign: 'center', 
-                                    color: '#94a3b8', 
+                                    textAlign: 'center',
+                                    color: '#94a3b8',
                                     marginTop: '1rem',
                                     fontSize: '0.9rem'
                                 }}>
@@ -637,7 +648,7 @@ function ModelPage({ model, onBack }) {
 
             <div className="model-actions">
                 {modelInfo?.status !== 'loaded' && (
-                    <button 
+                    <button
                         className="btn btn-primary btn-lg"
                         onClick={loadModel}
                         disabled={loading}
@@ -654,20 +665,20 @@ function ModelPage({ model, onBack }) {
             </div>
 
             <div className="model-tabs">
-                <button 
-                    className={activeTab === 'info' ? 'active' : ''} 
+                <button
+                    className={activeTab === 'info' ? 'active' : ''}
                     onClick={() => setActiveTab('info')}
                 >
                     📋 Model Info
                 </button>
-                <button 
+                <button
                     className={activeTab === 'evaluate' ? 'active' : ''}
                     onClick={() => setActiveTab('evaluate')}
                     disabled={modelInfo?.status !== 'loaded'}
                 >
                     📊 Evaluate
                 </button>
-                <button 
+                <button
                     className={activeTab === 'predict' ? 'active' : ''}
                     onClick={() => setActiveTab('predict')}
                     disabled={modelInfo?.status !== 'loaded'}
