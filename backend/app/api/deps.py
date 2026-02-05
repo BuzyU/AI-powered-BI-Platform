@@ -1,12 +1,13 @@
 # API Dependencies
-from typing import AsyncGenerator
-from sqlalchemy.ext.asyncio import AsyncSession
+from typing import AsyncGenerator, TYPE_CHECKING
 from fastapi import Depends, HTTPException, status, Header
 from uuid import UUID
 import re
 
-from app.db.session import get_db, async_session_maker
-from app.models.db import Tenant
+# Defer database imports to avoid import-time errors
+if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession
+    from app.models.db import Tenant
 
 
 # Session ID validation regex - UUID format only
@@ -36,20 +37,21 @@ async def get_validated_session_id(
     return validate_session_id(x_session_id)
 
 
-async def get_session() -> AsyncGenerator[AsyncSession, None]:
+async def get_session():
     """Get database session dependency."""
+    from app.db.session import get_db
     async for session in get_db():
         yield session
 
 
 async def get_tenant(
     tenant_id: UUID = None,
-    db: AsyncSession = Depends(get_session)
-) -> Tenant:
+    db = Depends(get_session)
+):
     """Get current tenant (for multi-tenancy)."""
-    # For MVP, use a default tenant or get from header
-    # In production, this would come from auth token
     from sqlalchemy import select
+    from app.models.db import Tenant
+    from app.db.session import async_session_maker
     
     if tenant_id:
         result = await db.execute(select(Tenant).where(Tenant.id == tenant_id))
