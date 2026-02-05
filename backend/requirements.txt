@@ -16,3 +16,5 @@ apscheduler>=3.10.0
 supabase>=2.3.0
 sqlalchemy[asyncio]>=2.0.0
 asyncpg>=0.29.0
+openpyxl>=3.1.0
+xlrd>=2.0.0

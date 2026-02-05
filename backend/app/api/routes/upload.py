@@ -46,7 +46,7 @@ GROQ_API_KEY = settings.GROQ_API_KEY
 UPLOAD_DIR = Path(settings.UPLOAD_DIR)
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
-ALLOWED_EXTENSIONS = {'csv', 'xls', 'xlsx', 'json', 'pt', 'onnx', 'h5', 'pkl'}
+ALLOWED_EXTENSIONS = {'csv', 'xls', 'xlsx', 'json', 'pt', 'onnx', 'h5', 'pkl', 'joblib'}
 
 
 def get_file_extension(filename: str) -> str:
@@ -451,7 +451,7 @@ async def ask_question(
     analysis = state.get_analysis(x_session_id)
     profiles = state.get_all_profiles(x_session_id)
     
-    state.add_chat_message(x_session_id, {"role": "user", "content": question})
+    state.add_chat_message(x_session_id, "user", question)
     
     try:
         ai = create_groq_ai(GROQ_API_KEY)
@@ -459,7 +459,7 @@ async def ask_question(
         result = await ai.answer_question(question, analysis or {}, profiles)
         await ai.close()
         
-        state.add_chat_message(x_session_id, {"role": "assistant", "content": result.get("answer")})
+        state.add_chat_message(x_session_id, "assistant", result.get("answer"))
         return result
     except Exception as e:
         return {"success": False, "answer": str(e)}

@@ -227,7 +227,7 @@ function UploadPage({ datasets, onUploadComplete, onAnalyzeStart, onAnalyzeCompl
                         </div>
                         <div className="dropzone-text">
                             <span className="dropzone-title">Drop files here or click to browse</span>
-                            <span className="dropzone-formats">CSV, Excel, JSON, PKL, PT, ONNX</span>
+                            <span className="dropzone-formats">CSV, Excel (.xlsx, .xls), JSON, Models (.pkl, .h5, .pt, .onnx)</span>
                         </div>
                     </label>
                 )}
@@ -344,18 +344,28 @@ function UploadPage({ datasets, onUploadComplete, onAnalyzeStart, onAnalyzeCompl
                                                 )}
                                             </td>
                                             <td className="cell-actions">
-                                                {!d.is_model && (
-                                                    <button 
-                                                        className="btn-action view"
-                                                        onClick={() => onViewProfile(d.id)}
-                                                        title="View Profile"
-                                                    >
+                                                <button 
+                                                    className="btn-action view"
+                                                    onClick={() => onViewProfile(d.id)}
+                                                    title={d.is_model ? "View Model" : "View Profile"}
+                                                >
+                                                    {d.is_model ? (
+                                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                                            <circle cx="12" cy="12" r="3"/>
+                                                            <path d="M12 2v4"/>
+                                                            <path d="M12 18v4"/>
+                                                            <path d="m4.93 4.93 2.83 2.83"/>
+                                                            <path d="m16.24 16.24 2.83 2.83"/>
+                                                            <path d="M2 12h4"/>
+                                                            <path d="M18 12h4"/>
+                                                        </svg>
+                                                    ) : (
                                                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                                                             <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
                                                             <circle cx="12" cy="12" r="3"/>
                                                         </svg>
-                                                    </button>
-                                                )}
+                                                    )}
+                                                </button>
                                                 <button 
                                                     className="btn-action delete"
                                                     onClick={(e) => handleDelete(d.id, e)}

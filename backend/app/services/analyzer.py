@@ -57,10 +57,40 @@ class DataAnalyzer:
                     except UnicodeDecodeError:
                         continue
             elif file_type in ['xls', 'xlsx']:
-                df = pd.read_excel(path)
+                # Excel files - use openpyxl for xlsx, xlrd for xls
+                try:
+                    if file_type == 'xlsx':
+                        df = pd.read_excel(path, engine='openpyxl')
+                    else:
+                        df = pd.read_excel(path, engine='xlrd')
+                except Exception as e:
+                    # Fallback to default engine
+                    logger.warning(f"Excel engine fallback: {e}")
+                    df = pd.read_excel(path)
             elif file_type == 'json':
-                df = pd.read_json(path)
-            elif file_type in ['pt', 'onnx', 'h5', 'pkl']:
+                # JSON files - handle different formats
+                try:
+                    df = pd.read_json(path)
+                except ValueError:
+                    # Try reading as lines (JSONL format)
+                    try:
+                        df = pd.read_json(path, lines=True)
+                    except:
+                        # Try reading as regular JSON and normalize
+                        import json as json_lib
+                        with open(path, 'r', encoding='utf-8') as f:
+                            data = json_lib.load(f)
+                        if isinstance(data, list):
+                            df = pd.DataFrame(data)
+                        elif isinstance(data, dict):
+                            # Check if it's a nested dict with data arrays
+                            if any(isinstance(v, list) for v in data.values()):
+                                df = pd.DataFrame(data)
+                            else:
+                                df = pd.DataFrame([data])
+                        else:
+                            raise ValueError("Unsupported JSON structure")
+            elif file_type in ['pt', 'onnx', 'h5', 'pkl', 'joblib']:
                 # Model file - return placeholder DF
                 return pd.DataFrame({'status': ['Model File Loaded'], 'path': [str(path)]}), {
                     'filename': path.name,

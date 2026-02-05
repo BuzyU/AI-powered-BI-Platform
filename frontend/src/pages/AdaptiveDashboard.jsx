@@ -414,26 +414,73 @@ function RenderChart({ type, data, colors, personaType }) {
 }
 
 // Individual Chart Components
+// Custom tick component for truncated labels
+const CustomXAxisTick = ({ x, y, payload }) => {
+  const label = String(payload.value)
+  const truncated = label.length > 12 ? label.substring(0, 10) + '...' : label
+  return (
+    <g transform={`translate(${x},${y})`}>
+      <text
+        x={0}
+        y={0}
+        dy={12}
+        textAnchor="end"
+        fill="#94a3b8"
+        fontSize={11}
+        transform="rotate(-35)"
+      >
+        {truncated}
+      </text>
+    </g>
+  )
+}
+
 function BarChartComponent({ data, colors, xLabel, yLabel }) {
   if (!data || data.length === 0) return <NoData />
   
+  // Limit to top 15 items for readability
+  const displayData = data.slice(0, 15)
+  
   return (
-    <ResponsiveContainer width="100%" height={300}>
-      <BarChart data={data} margin={{ top: 20, right: 30, left: 20, bottom: 60 }}>
-        <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
+    <ResponsiveContainer width="100%" height={320}>
+      <BarChart data={displayData} margin={{ top: 20, right: 20, left: 20, bottom: 70 }}>
+        <defs>
+          <linearGradient id="barGradient" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor={colors[0]} stopOpacity={1}/>
+            <stop offset="100%" stopColor={colors[0]} stopOpacity={0.7}/>
+          </linearGradient>
+        </defs>
+        <CartesianGrid strokeDasharray="3 3" stroke="#334155" opacity={0.5} />
         <XAxis 
           dataKey="label" 
-          tick={{ fill: '#94a3b8', fontSize: 12 }}
-          angle={-45}
-          textAnchor="end"
+          tick={<CustomXAxisTick />}
           interval={0}
+          axisLine={{ stroke: '#475569' }}
+          tickLine={{ stroke: '#475569' }}
         />
-        <YAxis tick={{ fill: '#94a3b8' }} />
+        <YAxis 
+          tick={{ fill: '#94a3b8', fontSize: 11 }}
+          axisLine={{ stroke: '#475569' }}
+          tickLine={{ stroke: '#475569' }}
+          tickFormatter={(value) => value >= 1000 ? `${(value/1000).toFixed(1)}k` : value}
+        />
         <Tooltip 
-          contentStyle={{ background: '#1e293b', border: '1px solid #334155', borderRadius: '8px' }}
-          labelStyle={{ color: '#f8fafc' }}
+          contentStyle={{ 
+            background: 'rgba(30, 41, 59, 0.95)', 
+            border: '1px solid #475569', 
+            borderRadius: '8px',
+            boxShadow: '0 10px 25px rgba(0,0,0,0.3)'
+          }}
+          labelStyle={{ color: '#f8fafc', fontWeight: 600, marginBottom: '4px' }}
+          itemStyle={{ color: '#94a3b8' }}
+          formatter={(value) => [typeof value === 'number' ? value.toLocaleString() : value, 'Value']}
         />
-        <Bar dataKey="value" fill={colors[0]} radius={[4, 4, 0, 0]} />
+        <Bar 
+          dataKey="value" 
+          fill="url(#barGradient)" 
+          radius={[6, 6, 0, 0]}
+          animationDuration={800}
+        />
       </BarChart>
     </ResponsiveContainer>
   )
@@ -443,20 +490,50 @@ function LineChartComponent({ data, colors, xLabel, yLabel }) {
   if (!data || data.length === 0) return <NoData />
   
   return (
-    <ResponsiveContainer width="100%" height={300}>
-      <LineChart data={data} margin={{ top: 20, right: 30, left: 20, bottom: 60 }}>
-        <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
+    <ResponsiveContainer width="100%" height={320}>
+      <LineChart data={data} margin={{ top: 20, right: 20, left: 20, bottom: 70 }}>
+        <defs>
+          <linearGradient id="lineGradient" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor={colors[0]} stopOpacity={0.3}/>
+            <stop offset="100%" stopColor={colors[0]} stopOpacity={0}/>
+          </linearGradient>
+        </defs>
+        <CartesianGrid strokeDasharray="3 3" stroke="#334155" opacity={0.5} />
         <XAxis 
           dataKey="label" 
-          tick={{ fill: '#94a3b8', fontSize: 12 }}
-          angle={-45}
-          textAnchor="end"
+          tick={<CustomXAxisTick />}
+          interval={Math.max(0, Math.floor(data.length / 10))}
+          axisLine={{ stroke: '#475569' }}
         />
-        <YAxis tick={{ fill: '#94a3b8' }} />
+        <YAxis 
+          tick={{ fill: '#94a3b8', fontSize: 11 }}
+          axisLine={{ stroke: '#475569' }}
+          tickFormatter={(value) => value >= 1000 ? `${(value/1000).toFixed(1)}k` : value}
+        />
         <Tooltip 
-          contentStyle={{ background: '#1e293b', border: '1px solid #334155', borderRadius: '8px' }}
+          contentStyle={{ 
+            background: 'rgba(30, 41, 59, 0.95)', 
+            border: '1px solid #475569', 
+            borderRadius: '8px',
+            boxShadow: '0 10px 25px rgba(0,0,0,0.3)'
+          }}
+          labelStyle={{ color: '#f8fafc', fontWeight: 600 }}
         />
-        <Line type="monotone" dataKey="value" stroke={colors[0]} strokeWidth={2} dot={{ fill: colors[0] }} />
+        <Area 
+          type="monotone" 
+          dataKey="value" 
+          stroke="none"
+          fill="url(#lineGradient)" 
+        />
+        <Line 
+          type="monotone" 
+          dataKey="value" 
+          stroke={colors[0]} 
+          strokeWidth={2.5} 
+          dot={{ fill: colors[0], strokeWidth: 0, r: 3 }}
+          activeDot={{ r: 6, fill: colors[0], stroke: '#fff', strokeWidth: 2 }}
+          animationDuration={800}
+        />
       </LineChart>
     </ResponsiveContainer>
   )
@@ -494,8 +571,31 @@ function AreaChartComponent({ data, colors, xLabel, yLabel }) {
 function PieChartComponent({ data, colors, isDonut }) {
   if (!data || data.length === 0) return <NoData />
   
+  // Custom label renderer for better display
+  const renderCustomLabel = ({ cx, cy, midAngle, innerRadius, outerRadius, percent, label }) => {
+    if (percent < 0.05) return null // Don't show labels for tiny slices
+    const RADIAN = Math.PI / 180
+    const radius = innerRadius + (outerRadius - innerRadius) * 1.3
+    const x = cx + radius * Math.cos(-midAngle * RADIAN)
+    const y = cy + radius * Math.sin(-midAngle * RADIAN)
+    const truncatedLabel = label?.length > 10 ? label.substring(0, 8) + '...' : label
+
+    return (
+      <text 
+        x={x} 
+        y={y} 
+        fill="#94a3b8" 
+        textAnchor={x > cx ? 'start' : 'end'} 
+        dominantBaseline="central"
+        fontSize={11}
+      >
+        {truncatedLabel}: {(percent * 100).toFixed(0)}%
+      </text>
+    )
+  }
+  
   return (
-    <ResponsiveContainer width="100%" height={300}>
+    <ResponsiveContainer width="100%" height={320}>
       <PieChart>
         <Pie
           data={data}
@@ -503,16 +603,34 @@ function PieChartComponent({ data, colors, isDonut }) {
           nameKey="label"
           cx="50%"
           cy="50%"
-          outerRadius={100}
+          outerRadius={110}
           innerRadius={isDonut ? 60 : 0}
-          label={({ label, percent }) => `${label}: ${(percent * 100).toFixed(0)}%`}
+          label={renderCustomLabel}
+          labelLine={{ stroke: '#475569', strokeWidth: 1 }}
+          animationDuration={800}
         >
           {data.map((_, index) => (
-            <Cell key={index} fill={colors[index % colors.length]} />
+            <Cell 
+              key={index} 
+              fill={colors[index % colors.length]}
+              stroke="#1e293b"
+              strokeWidth={2}
+            />
           ))}
         </Pie>
         <Tooltip 
-          contentStyle={{ background: '#1e293b', border: '1px solid #334155', borderRadius: '8px' }}
+          contentStyle={{ 
+            background: 'rgba(30, 41, 59, 0.95)', 
+            border: '1px solid #475569', 
+            borderRadius: '8px',
+            boxShadow: '0 10px 25px rgba(0,0,0,0.3)'
+          }}
+          formatter={(value, name) => [value.toLocaleString(), name]}
+        />
+        <Legend 
+          wrapperStyle={{ fontSize: '11px', color: '#94a3b8' }}
+          iconType="circle"
+          formatter={(value) => <span style={{ color: '#94a3b8' }}>{value?.length > 15 ? value.substring(0, 12) + '...' : value}</span>}
         />
       </PieChart>
     </ResponsiveContainer>
@@ -551,21 +669,53 @@ function ScatterChartComponent({ data, colors, xLabel, yLabel }) {
 function HistogramComponent({ data, colors, xLabel }) {
   if (!data || data.length === 0) return <NoData />
   
+  // Format bin labels to be shorter
+  const formattedData = data.map(item => ({
+    ...item,
+    shortBin: String(item.bin).length > 10 ? String(item.bin).substring(0, 8) + '...' : item.bin
+  }))
+  
   return (
-    <ResponsiveContainer width="100%" height={300}>
-      <BarChart data={data} margin={{ top: 20, right: 30, left: 20, bottom: 60 }}>
-        <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
+    <ResponsiveContainer width="100%" height={320}>
+      <BarChart data={formattedData} margin={{ top: 20, right: 20, left: 20, bottom: 70 }}>
+        <defs>
+          <linearGradient id="histGradient" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor={colors[0]} stopOpacity={0.9}/>
+            <stop offset="100%" stopColor={colors[0]} stopOpacity={0.6}/>
+          </linearGradient>
+        </defs>
+        <CartesianGrid strokeDasharray="3 3" stroke="#334155" opacity={0.5} />
         <XAxis 
-          dataKey="bin" 
+          dataKey="shortBin" 
           tick={{ fill: '#94a3b8', fontSize: 10 }}
-          angle={-45}
+          angle={-35}
           textAnchor="end"
+          interval={0}
+          axisLine={{ stroke: '#475569' }}
         />
-        <YAxis tick={{ fill: '#94a3b8' }} />
+        <YAxis 
+          tick={{ fill: '#94a3b8', fontSize: 11 }}
+          axisLine={{ stroke: '#475569' }}
+          tickFormatter={(value) => value >= 1000 ? `${(value/1000).toFixed(1)}k` : value}
+          label={{ value: 'Frequency', angle: -90, position: 'insideLeft', fill: '#64748b', fontSize: 11 }}
+        />
         <Tooltip 
-          contentStyle={{ background: '#1e293b', border: '1px solid #334155', borderRadius: '8px' }}
+          contentStyle={{ 
+            background: 'rgba(30, 41, 59, 0.95)', 
+            border: '1px solid #475569', 
+            borderRadius: '8px',
+            boxShadow: '0 10px 25px rgba(0,0,0,0.3)'
+          }}
+          labelStyle={{ color: '#f8fafc', fontWeight: 600 }}
+          formatter={(value, name) => [value.toLocaleString(), 'Count']}
+          labelFormatter={(label) => `Bin: ${label}`}
         />
-        <Bar dataKey="count" fill={colors[0]} />
+        <Bar 
+          dataKey="count" 
+          fill="url(#histGradient)"
+          radius={[4, 4, 0, 0]}
+          animationDuration={600}
+        />
       </BarChart>
     </ResponsiveContainer>
   )

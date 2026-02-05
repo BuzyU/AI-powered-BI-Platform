@@ -8,6 +8,7 @@ import UploadPage from './pages/UploadPage'
 import AdaptiveDashboard from './pages/AdaptiveDashboard'
 import ProfilePage from './pages/ProfilePage'
 import ChatPage from './pages/ChatPage'
+import ModelPage from './pages/ModelPage'
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000/api'
 
@@ -82,7 +83,13 @@ function MainApp() {
   const handleViewProfile = (datasetId) => {
     const dataset = datasets.find(d => d.id === datasetId)
     setSelectedDataset(dataset)
-    setActivePage('profile')
+    
+    // Check if it's a model file
+    if (dataset?.metadata?.is_model) {
+      setActivePage('model')
+    } else {
+      setActivePage('profile')
+    }
   }
 
   const handleNavigate = (page) => {
@@ -109,6 +116,13 @@ function MainApp() {
             onBack={() => setActivePage('upload')}
             onProfileUpdate={(id, p) => fetchDatasets()}
             onContinue={() => setActivePage('dashboard')}
+          />
+        )
+      case 'model':
+        return (
+          <ModelPage
+            model={selectedDataset}
+            onBack={() => setActivePage('upload')}
           />
         )
       case 'dashboard':

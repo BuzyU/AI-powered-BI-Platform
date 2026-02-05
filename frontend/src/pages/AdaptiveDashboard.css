@@ -200,8 +200,8 @@
 /* KPI Row */
 .kpi-row {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 1.25rem;
   margin-bottom: 2rem;
 }
 
@@ -209,34 +209,40 @@
   display: flex;
   align-items: center;
   gap: 1rem;
-  padding: 1.25rem;
+  padding: 1.5rem;
   background: var(--card-bg, #1e293b);
   border: 1px solid var(--border-color, #334155);
-  border-radius: 12px;
-  transition: all 0.2s;
+  border-radius: 16px;
+  transition: all 0.3s ease;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
 
 .kpi-card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+  transform: translateY(-4px);
+  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.2);
+  border-color: rgba(59, 130, 246, 0.3);
 }
 
 /* Persona-specific KPI styles */
 .kpi-card.persona-business {
   border-left: 4px solid #3b82f6;
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.08) 0%, var(--card-bg, #1e293b) 100%);
 }
 
 .kpi-card.persona-analytics {
   border-left: 4px solid #8b5cf6;
+  background: linear-gradient(135deg, rgba(139, 92, 246, 0.08) 0%, var(--card-bg, #1e293b) 100%);
 }
 
 .kpi-card.persona-ml_engineer {
   border-left: 4px solid #14b8a6;
+  background: linear-gradient(135deg, rgba(20, 184, 166, 0.08) 0%, var(--card-bg, #1e293b) 100%);
 }
 
 .kpi-icon {
-  font-size: 2rem;
-  opacity: 0.9;
+  font-size: 2.25rem;
+  opacity: 0.95;
+  filter: drop-shadow(0 2px 4px rgba(0,0,0,0.2));
 }
 
 .kpi-content {
@@ -244,16 +250,18 @@
 }
 
 .kpi-value {
-  font-size: 1.5rem;
+  font-size: 1.75rem;
   font-weight: 700;
   color: var(--text-primary, #f8fafc);
   line-height: 1.2;
+  letter-spacing: -0.025em;
 }
 
 .kpi-label {
   font-size: 0.85rem;
   color: var(--text-secondary, #94a3b8);
-  margin-top: 0.25rem;
+  margin-top: 0.35rem;
+  font-weight: 500;
 }
 
 /* Charts Grid */
@@ -280,52 +288,64 @@
 .chart-card {
   background: var(--card-bg, #1e293b);
   border: 1px solid var(--border-color, #334155);
-  border-radius: 12px;
+  border-radius: 16px;
   overflow: hidden;
-  transition: all 0.2s;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
 }
 
 .chart-card:hover {
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.25);
+  transform: translateY(-2px);
+  border-color: rgba(59, 130, 246, 0.3);
 }
 
 /* Persona-specific chart styles */
 .chart-card.persona-business {
   border-top: 3px solid #3b82f6;
+  background: linear-gradient(180deg, rgba(59, 130, 246, 0.05) 0%, var(--card-bg, #1e293b) 100%);
 }
 
 .chart-card.persona-analytics {
   border-top: 3px solid #8b5cf6;
+  background: linear-gradient(180deg, rgba(139, 92, 246, 0.05) 0%, var(--card-bg, #1e293b) 100%);
 }
 
 .chart-card.persona-ml_engineer {
   border-top: 3px solid #14b8a6;
+  background: linear-gradient(180deg, rgba(20, 184, 166, 0.05) 0%, var(--card-bg, #1e293b) 100%);
 }
 
 .chart-header {
-  padding: 1rem 1.25rem;
-  border-bottom: 1px solid var(--border-color, #334155);
+  padding: 1.25rem 1.5rem 1rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  background: rgba(0, 0, 0, 0.1);
 }
 
 .chart-header h3 {
-  font-size: 1rem;
+  font-size: 1.05rem;
   font-weight: 600;
   margin: 0;
   color: var(--text-primary, #f8fafc);
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
 }
 
 .chart-header p {
   font-size: 0.8rem;
   color: var(--text-secondary, #94a3b8);
-  margin: 0.25rem 0 0;
+  margin: 0.35rem 0 0;
+  opacity: 0.9;
 }
 
 .chart-body {
-  padding: 1rem;
-  min-height: 320px;
+  padding: 1.25rem;
+  min-height: 350px;
   display: flex;
   align-items: center;
   justify-content: center;
+  background: transparent;
 }
 
 .chart-error {

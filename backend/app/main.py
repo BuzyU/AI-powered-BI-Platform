@@ -8,6 +8,7 @@ import os
 from app.config import settings
 from app.api.routes import upload
 from app.api.routes import session_dashboard
+from app.api.routes import models
 
 # Setup logging
 logging.basicConfig(
@@ -112,6 +113,7 @@ app.add_middleware(
 # Include API routes
 app.include_router(upload.router, prefix="/api", tags=["API"])
 app.include_router(session_dashboard.router, prefix="/api", tags=["Dashboard"])
+app.include_router(models.router, prefix="/api", tags=["Models"])
 
 
 @app.get("/health")

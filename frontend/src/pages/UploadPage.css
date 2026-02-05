@@ -24,19 +24,39 @@
 /* Dropzone */
 .upload-dropzone {
     border: 2px dashed var(--border-color);
-    border-radius: 12px;
-    background: var(--bg-primary);
-    padding: 3rem 2rem;
+    border-radius: 16px;
+    background: linear-gradient(135deg, var(--bg-primary) 0%, var(--neutral-50) 100%);
+    padding: 3.5rem 2rem;
     text-align: center;
     cursor: pointer;
-    transition: all 0.2s ease;
+    transition: all 0.3s ease;
     margin-bottom: 2rem;
+    position: relative;
+    overflow: hidden;
+}
+
+.upload-dropzone::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: linear-gradient(135deg, rgba(59, 130, 246, 0.05) 0%, rgba(139, 92, 246, 0.05) 100%);
+    opacity: 0;
+    transition: opacity 0.3s ease;
+}
+
+.upload-dropzone:hover::before,
+.upload-dropzone.active::before {
+    opacity: 1;
 }
 
 .upload-dropzone:hover,
 .upload-dropzone.active {
     border-color: var(--primary-500);
-    background: var(--primary-50);
+    box-shadow: 0 8px 30px rgba(59, 130, 246, 0.15);
+    transform: translateY(-2px);
 }
 
 .upload-dropzone.uploading {
