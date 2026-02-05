@@ -2,7 +2,7 @@
 
 An intelligent, full-stack Business Intelligence platform that transforms raw data into actionable insights using AI and dynamic visualization tools.
 
-## 🚀 Key Features
+## Key Features
 
 ### 1. **Automated Data Engineering**
    - **Smart Profiling**: Automatically detects schema, missing values, duplicates, and outliers.
@@ -23,7 +23,7 @@ An intelligent, full-stack Business Intelligence platform that transforms raw da
    - **Custom Chart Builder**: Drag-and-drop interface to create your own charts (Bar, Line, Scatter, etc.) with support for aggregations (Sum, Mean, Count) and automatic binning for large datasets.
    - **Python Plotter**: **[New]** A built-in code editor to execute custom Python code (using `matplotlib` and `seaborn`) directly in the browser for complex, publication-ready visualizations.
 
-## 🛠️ Tech Stack
+## Tech Stack
 
 - **Frontend**: React.js (Vite), CSS3 (Custom Dashboard Design)
 - **Backend**: FastAPI (Python), Uvicorn
@@ -31,7 +31,7 @@ An intelligent, full-stack Business Intelligence platform that transforms raw da
 - **AI/LLM**: Groq API (Llama 3 70B)
 - **Storage**: Local filesystem (Managed Uploads)
 
-## 📦 Installation & Setup
+## Installation & Setup
 
 ### Prerequisites
 - Python 3.9+
