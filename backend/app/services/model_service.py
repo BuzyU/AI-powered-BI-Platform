@@ -102,6 +102,13 @@ class ModelService:
         with open(path, 'rb') as f:
             model = pickle.load(f)
         
+        # Validate it's likely a model
+        if not hasattr(model, 'predict') and not hasattr(model, 'predict_proba'):
+            # Check if it's a dataframe/series
+            if hasattr(model, 'columns') or hasattr(model, 'name'):
+                raise ValueError("Uploaded file appears to be a dataset (DataFrame), not a model. Please upload a valid .pkl model file.")
+            raise ValueError(f"Uploaded object {type(model).__name__} does not have a 'predict' method. Ensure it is a valid scikit-learn model.")
+
         info = {
             'framework': 'scikit-learn',
             'class': type(model).__name__,
