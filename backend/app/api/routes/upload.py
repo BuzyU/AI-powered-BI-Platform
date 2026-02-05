@@ -20,6 +20,14 @@ from app.services import state
 from app.layers.l2_classification.content_classifier import SmartContentClassifier
 from app.layers.l5_relationship.linkage_validator import LinkageValidator
 
+# Supabase integration
+try:
+    from app.db.supabase_client import supabase, SupabaseStorage, SupabaseDB
+    SUPABASE_ENABLED = True
+except Exception as e:
+    SUPABASE_ENABLED = False
+    print(f"Supabase not available: {e}")
+
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
@@ -108,9 +116,25 @@ async def upload_files(
         dataset_id = str(uuid4())
         file_path = session_dir / f"{dataset_id}.{ext}"
         
+        # Read file content
+        content = await file.read()
+        
+        # Save locally
         async with aiofiles.open(file_path, 'wb') as f:
-            content = await file.read()
             await f.write(content)
+        
+        # Also save to Supabase Storage (if enabled)
+        supabase_path = None
+        if SUPABASE_ENABLED:
+            try:
+                storage_path = f"{session_id}/{dataset_id}.{ext}"
+                content_type = "text/csv" if ext == "csv" else "application/octet-stream"
+                upload_result = await SupabaseStorage.upload_file(storage_path, content, content_type)
+                if upload_result.get("success"):
+                    supabase_path = storage_path
+                    logger.info(f"Uploaded to Supabase: {storage_path}")
+            except Exception as e:
+                logger.warning(f"Supabase upload failed (continuing with local): {e}")
         
         try:
             # 1. Load & Understand Content
@@ -142,6 +166,7 @@ async def upload_files(
                 'id': dataset_id,
                 'filename': file.filename,
                 'file_path': str(file_path),
+                'supabase_path': supabase_path,
                 'file_type': ext,
                 'metadata': metadata,
                 'df': df,
@@ -149,6 +174,29 @@ async def upload_files(
                 'classification': classification_result
             }
             state.store_dataset(session_id, dataset_id, dataset_info)
+            
+            # 5. Save dataset metadata to Supabase DB (if enabled)
+            if SUPABASE_ENABLED:
+                try:
+                    db_record = {
+                        'id': dataset_id,
+                        'tenant_id': '00000000-0000-0000-0000-000000000001',  # Default tenant
+                        'filename': file.filename,
+                        'file_type': ext,
+                        'file_path': str(file_path),
+                        'storage_path': supabase_path,
+                        'role': metadata.get('detected_role'),
+                        'role_confidence': metadata.get('confidence'),
+                        'row_count': metadata.get('row_count'),
+                        'column_count': metadata.get('column_count'),
+                        'columns': metadata.get('columns'),
+                        'health_score': profile.get('overall_quality'),
+                        'status': 'analyzed'
+                    }
+                    supabase.table('datasets').upsert(db_record).execute()
+                    logger.info(f"Saved dataset to Supabase DB: {dataset_id}")
+                except Exception as e:
+                    logger.warning(f"Supabase DB save failed: {e}")
             
             # Track for linkage
             uploaded_datasets.append({
