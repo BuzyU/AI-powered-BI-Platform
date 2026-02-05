@@ -53,7 +53,7 @@ class Settings(BaseSettings):
     CHROMA_PERSIST_DIR: str = "./chroma_db"
     
     # Security
-    SECRET_KEY: str = "change-this-in-production-use-a-secure-random-key"
+    SECRET_KEY: str = ""  # MUST be set in production
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
     
     # Cleanup Settings

@@ -6,25 +6,32 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-# Supabase credentials
-SUPABASE_URL = os.getenv("SUPABASE_URL", "https://aivlfocxshysxxcxxkae.supabase.co")
-SUPABASE_ANON_KEY = os.getenv("SUPABASE_ANON_KEY", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFpdmxmb2N4c2h5c3h4Y3h4a2FlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzAyNzAwNDgsImV4cCI6MjA4NTg0NjA0OH0.uX0StCRDK5t7YNjmgOyD6hl2MHX_o8TT5EOyPBWWzLk")
-SUPABASE_SERVICE_KEY = os.getenv("SUPABASE_SERVICE_KEY", "")  # Add service role key for admin operations
+# Supabase credentials - MUST be set via environment variables
+SUPABASE_URL = os.getenv("SUPABASE_URL")
+SUPABASE_ANON_KEY = os.getenv("SUPABASE_ANON_KEY")
+SUPABASE_SERVICE_KEY = os.getenv("SUPABASE_SERVICE_KEY", "")
 
-# Create Supabase client
-supabase: Client = create_client(SUPABASE_URL, SUPABASE_ANON_KEY)
-
-# Log connection status
-logger.info(f"Supabase client initialized for: {SUPABASE_URL}")
+# Validate required credentials
+if not SUPABASE_URL or not SUPABASE_ANON_KEY:
+    logger.warning("Supabase credentials not configured. Set SUPABASE_URL and SUPABASE_ANON_KEY environment variables.")
+    supabase = None
+else:
+    # Create Supabase client
+    supabase: Client = create_client(SUPABASE_URL, SUPABASE_ANON_KEY)
+    logger.info(f"Supabase client initialized for: {SUPABASE_URL}")
 
 
 def get_supabase_client() -> Client:
     """Get Supabase client instance."""
+    if supabase is None:
+        raise RuntimeError("Supabase not configured. Set SUPABASE_URL and SUPABASE_ANON_KEY.")
     return supabase
 
 
 def get_admin_client() -> Client:
     """Get Supabase admin client with service role key."""
+    if supabase is None:
+        raise RuntimeError("Supabase not configured.")
     if SUPABASE_SERVICE_KEY:
         return create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
     return supabase
@@ -32,6 +39,12 @@ def get_admin_client() -> Client:
 
 def check_supabase_connection() -> dict:
     """Check if Supabase connection is working."""
+    if supabase is None:
+        return {
+            "connected": False,
+            "url": None,
+            "error": "Supabase credentials not configured"
+        }
     try:
         # Try to list buckets to verify connection
         buckets = supabase.storage.list_buckets()
@@ -86,6 +99,9 @@ class SupabaseStorage:
     @staticmethod
     def upload_file(file_path: str, file_content: bytes, content_type: str = None) -> dict:
         """Upload file to Supabase storage (synchronous)."""
+        if supabase is None:
+            return {"success": False, "error": "Supabase not configured", "skipped": True}
+        
         try:
             file_size = len(file_content)
             file_size_mb = file_size / (1024 * 1024)
@@ -153,18 +169,24 @@ class SupabaseStorage:
     @staticmethod
     def download_file(file_path: str) -> bytes:
         """Download file from Supabase storage."""
+        if supabase is None:
+            raise RuntimeError("Supabase not configured")
         response = supabase.storage.from_(SupabaseStorage.BUCKET_NAME).download(file_path)
         return response
     
     @staticmethod
     def get_public_url(file_path: str) -> str:
         """Get public URL for a file."""
+        if supabase is None:
+            return ""
         response = supabase.storage.from_(SupabaseStorage.BUCKET_NAME).get_public_url(file_path)
         return response
     
     @staticmethod
     def delete_file(file_path: str) -> dict:
         """Delete file from Supabase storage."""
+        if supabase is None:
+            return {"success": False, "error": "Supabase not configured"}
         try:
             response = supabase.storage.from_(SupabaseStorage.BUCKET_NAME).remove([file_path])
             return {"success": True, "data": response}
@@ -174,6 +196,8 @@ class SupabaseStorage:
     @staticmethod
     def list_files(folder: str = "") -> list:
         """List files in a folder."""
+        if supabase is None:
+            return []
         response = supabase.storage.from_(SupabaseStorage.BUCKET_NAME).list(folder)
         return response
 
@@ -185,17 +209,23 @@ class SupabaseDB:
     @staticmethod
     def table(table_name: str):
         """Get table reference."""
+        if supabase is None:
+            raise RuntimeError("Supabase not configured")
         return supabase.table(table_name)
     
     @staticmethod
     async def insert(table_name: str, data: dict) -> dict:
         """Insert data into table."""
+        if supabase is None:
+            return {}
         response = supabase.table(table_name).insert(data).execute()
         return response.data
     
     @staticmethod
     async def select(table_name: str, columns: str = "*", filters: dict = None) -> list:
         """Select data from table."""
+        if supabase is None:
+            return []
         query = supabase.table(table_name).select(columns)
         if filters:
             for key, value in filters.items():
@@ -206,6 +236,8 @@ class SupabaseDB:
     @staticmethod
     async def update(table_name: str, data: dict, filters: dict) -> dict:
         """Update data in table."""
+        if supabase is None:
+            return {}
         query = supabase.table(table_name).update(data)
         for key, value in filters.items():
             query = query.eq(key, value)
@@ -215,6 +247,8 @@ class SupabaseDB:
     @staticmethod
     async def delete(table_name: str, filters: dict) -> dict:
         """Delete data from table."""
+        if supabase is None:
+            return {}
         query = supabase.table(table_name).delete()
         for key, value in filters.items():
             query = query.eq(key, value)

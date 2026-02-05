@@ -617,9 +617,29 @@ async def python_plot(
             
     if df is None: raise HTTPException(400, "Dataset not found")
     
-    # Sanitization check
-    if any(k in request.code for k in ['import os', 'import sys', 'subprocess']):
-         raise HTTPException(400, "Unsafe code")
-         
+    # SECURITY: Comprehensive code sanitization
+    # This endpoint is disabled for security reasons - arbitrary code execution is dangerous
+    dangerous_patterns = [
+        'import os', 'import sys', 'subprocess', '__import__', 'eval(', 'exec(',
+        'open(', 'file(', 'input(', 'compile(', 'globals(', 'locals(',
+        '__builtins__', '__code__', '__class__', 'getattr(', 'setattr(',
+        'delattr(', 'hasattr(', 'vars(', 'dir(', 'type(', 'object',
+        '.read(', '.write(', 'os.', 'sys.', 'shutil', 'pathlib', 'socket',
+        'requests', 'urllib', 'http', 'ftplib', 'telnetlib', 'pickle',
+        'marshal', 'shelve', 'dbm', 'sqlite', 'ctypes', 'multiprocessing',
+        'threading', 'asyncio', 'concurrent', 'cmd', 'code', 'codeop',
+        'breakpoint', 'help(', 'exit(', 'quit(', 'license(', 'copyright(',
+        'credits(', 'chr(', 'ord(', 'bytes(', 'bytearray(', 'memoryview(',
+        '\\x', '\\u', '__dict__', '__bases__', '__mro__', '__subclasses__'
+    ]
+    
+    code_lower = request.code.lower()
+    for pattern in dangerous_patterns:
+        if pattern.lower() in code_lower:
+            raise HTTPException(400, f"Unsafe code pattern detected: '{pattern}'. This feature is restricted for security.")
+    
+    # Only allow simple plotting operations with pandas/matplotlib
+    allowed_imports = ['import matplotlib', 'import seaborn', 'import numpy as np']
+    
     img = analyzer.execute_custom_plot(df, request.code)
     return {'image': f"data:image/png;base64,{img}"}

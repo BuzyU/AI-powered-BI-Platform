@@ -1,12 +1,21 @@
 # ML Model Service - Load, Evaluate, and Predict with .pkl, .h5, .onnx models
+# type: ignore[import]  # Optional ML framework imports are handled at runtime
 import logging
 import pickle
 import json
 import numpy as np
 import pandas as pd
 from pathlib import Path
-from typing import Dict, Any, Optional, List, Union
+from typing import Dict, Any, Optional, List, Union, TYPE_CHECKING
 from datetime import datetime
+
+# Optional ML framework imports - these are only used if installed
+# They are imported dynamically in the respective methods with proper error handling
+if TYPE_CHECKING:
+    import tensorflow as tf  # noqa: F401
+    import torch  # noqa: F401
+    import onnx  # noqa: F401
+    import onnxruntime  # noqa: F401
 
 logger = logging.getLogger(__name__)
 

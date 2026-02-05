@@ -58,8 +58,9 @@ function DashboardPage({ analysisData }) {
                     setAvailableVars(result.datasets[0].columns || [])
                 }
             } else {
-                debugger
+                // Removed debugger statement for production
                 const errText = await response.text()
+                console.error('Analysis fetch failed:', errText)
                 throw new Error(errText || "Failed to load analysis")
             }
         } catch (error) {
