@@ -377,9 +377,9 @@ function ChartGrid({ charts, colors }) {
 
 // Responsive Chart Component
 function ResponsiveChart({ chart, colors }) {
-  const data = chart.data?.values ? 
+  const data = (chart.data?.values && chart.data?.labels) ? 
     chart.data.labels.map((label, i) => ({ name: label, value: chart.data.values[i] })) :
-    chart.data
+    (Array.isArray(chart.data) ? chart.data : [])
 
   switch (chart.type) {
     case 'bar':
@@ -462,7 +462,7 @@ function ResponsiveChart({ chart, colors }) {
 
 // Confusion Matrix Component
 function ConfusionMatrixChart({ data, colors }) {
-  if (!data?.matrix) return <p>No confusion matrix data</p>
+  if (!data?.matrix || !data?.labels) return <p>No confusion matrix data</p>
 
   const { matrix, labels } = data
 
@@ -501,7 +501,7 @@ function ConfusionMatrixChart({ data, colors }) {
 
 // Heatmap Chart Component
 function HeatmapChart({ data, colors }) {
-  if (!data?.matrix) return <p>No heatmap data</p>
+  if (!data?.matrix || !data?.columns) return <p>No heatmap data</p>
 
   const { matrix, columns } = data
 

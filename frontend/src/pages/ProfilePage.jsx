@@ -259,7 +259,7 @@ function ProfilePage({ dataset, onBack, onProfileUpdate, onContinue }) {
                     </tr>
                 </thead>
                 <tbody>
-                    {profile.columns.map(col => (
+                    {(profile.columns || []).map(col => (
                         <tr key={col.name}>
                             <td className="font-medium">{col.name}</td>
                             <td><span className={`type-badge ${col.semantic_type}`}>{col.semantic_type}</span></td>
