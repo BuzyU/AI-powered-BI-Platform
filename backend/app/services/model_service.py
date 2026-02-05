@@ -270,7 +270,7 @@ class ModelService:
         framework = metadata.get('framework', '')
         
         try:
-            if 'sklearn' in framework or 'pickle' in framework:
+            if 'sklearn' in framework or 'pickle' in framework or 'scikit-learn' in framework:
                 return self._predict_sklearn(model, X, metadata)
             elif 'keras' in framework or 'tensorflow' in framework:
                 return self._predict_keras(model, X, metadata)
