@@ -55,13 +55,39 @@ def get_file_extension(filename: str) -> str:
     return filename.rsplit('.', 1)[-1].lower() if '.' in filename else ''
 
 
+def validate_session_id(session_id: str) -> str:
+    """Validate session ID format to prevent path traversal and ensure safety."""
+    import re
+    # Allow valid UUIDs or the default_session
+    uuid_pattern = r'^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$'
+    if session_id == "default_session":
+        return session_id
+    if not re.match(uuid_pattern, session_id, re.I):
+        raise HTTPException(400, "Invalid session ID format. Must be a valid UUID.")
+    return session_id
+
+
 # ============== SESSION ROUTES ==============
 
+class CreateSessionRequest(BaseModel):
+    id: Optional[str] = None
+    name: Optional[str] = None
+
 @router.post("/sessions")
-async def create_session():
+async def create_session_route(request: CreateSessionRequest = Body(default=None)):
     """Create a new analysis session."""
-    session_id = str(uuid4())
-    state.get_session(session_id) # Initializes it
+    # Use frontend-provided ID if valid, otherwise generate new one
+    if request and request.id:
+        try:
+            validate_session_id(request.id)
+            session_id = request.id
+        except HTTPException:
+            session_id = str(uuid4())
+    else:
+        session_id = str(uuid4())
+    
+    name = request.name if request else None
+    state.create_session(session_id, name)
     return {"session_id": session_id}
 
 @router.get("/sessions")
