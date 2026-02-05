@@ -236,27 +236,27 @@ class EnhancedPersonaDetector:
         self.cv_indicators = {
             'object_detection': {
                 'columns': ['bbox', 'bounding_box', 'x1', 'y1', 'x2', 'y2', 
-                           'xmin', 'ymin', 'xmax', 'ymax', 'width', 'height',
-                           'iou', 'map', 'detection', 'anchor'],
-                'filename': ['detection', 'bbox', 'objects', 'yolo', 'coco'],
+                           'xmin', 'ymin', 'xmax', 'ymax', 'obj_width', 'obj_height',
+                           'iou', 'map', 'detection_score', 'anchor_box'],
+                'filename': ['detection', 'bbox', 'objects', 'yolo', 'coco', 'annotations'],
                 'weight': 3.0
             },
             'image_classification': {
-                'columns': ['image', 'img', 'image_id', 'image_path', 'filename',
-                           'class_name', 'class_id', 'top_1', 'top_5'],
-                'filename': ['imagenet', 'classification', 'images', 'cifar'],
+                'columns': ['image_id', 'image_path', 'img_path', 'image_file',
+                           'class_name', 'class_id', 'top_1', 'top_5', 'predicted_class'],
+                'filename': ['imagenet', 'classification', 'cifar', 'mnist', 'image_labels'],
                 'weight': 2.5
             },
             'segmentation': {
-                'columns': ['mask', 'segment', 'pixel', 'region', 'dice', 
-                           'jaccard', 'overlap', 'boundary'],
-                'filename': ['segmentation', 'mask', 'semantic'],
+                'columns': ['mask', 'seg_mask', 'pixel_mask', 'dice_score', 
+                           'jaccard_score', 'pixel_overlap', 'seg_boundary', 'instance_id'],
+                'filename': ['segmentation', 'mask', 'semantic_seg', 'instance_seg'],
                 'weight': 2.5
             },
             'image_features': {
-                'columns': ['image_feature', 'visual', 'cnn', 'resnet', 'vgg',
-                           'inception', 'efficientnet', 'pooling'],
-                'filename': ['features', 'extracted', 'cnn_features'],
+                'columns': ['image_feature', 'visual_feature', 'cnn_feature', 'resnet_feat',
+                           'vgg_feat', 'inception_feat', 'efficientnet_feat', 'pooling_feat'],
+                'filename': ['features', 'cnn_features', 'image_embeddings'],
                 'weight': 2.0
             }
         }
@@ -559,10 +559,15 @@ class EnhancedPersonaDetector:
         categories: Set[DataCategory]
     ) -> DashboardType:
         """Determine dashboard type based on persona and data categories."""
-        # CV takes precedence if detected
+        # CV requires STRONG evidence - multiple CV categories or CV persona
         cv_cats = {DataCategory.IMAGE_DATA, DataCategory.OBJECT_DETECTION, 
                    DataCategory.IMAGE_CLASSIFICATION, DataCategory.SEGMENTATION}
-        if categories & cv_cats or persona == UserPersona.COMPUTER_VISION:
+        cv_matches = categories & cv_cats
+        
+        # Only use CV dashboard if:
+        # 1. Persona is explicitly CV, OR
+        # 2. Multiple CV categories detected (not just one weak match)
+        if persona == UserPersona.COMPUTER_VISION or len(cv_matches) >= 2:
             return DashboardType.CV_DASHBOARD
         
         if DataCategory.MODEL_FILE in categories:
