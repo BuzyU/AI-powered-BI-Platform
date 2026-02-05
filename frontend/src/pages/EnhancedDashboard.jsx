@@ -223,7 +223,7 @@ export default function EnhancedDashboard() {
       </main>
 
       {/* Recommendations */}
-      {dashboard.persona_detection?.recommended_analysis && (
+      {Array.isArray(dashboard.persona_detection?.recommended_analysis) && dashboard.persona_detection.recommended_analysis.length > 0 && (
         <aside className="recommendations-panel">
           <h3>💡 Recommended Analysis</h3>
           <ul>
@@ -315,7 +315,7 @@ function DashboardSection({ section, colors, persona }) {
 
 // KPI Grid Component
 function KPIGrid({ data, colors }) {
-  if (!data || data.length === 0) return null
+  if (!Array.isArray(data) || data.length === 0) return null
 
   return (
     <div className="kpi-grid">
@@ -340,7 +340,7 @@ function KPIGrid({ data, colors }) {
 
 // Metric Cards Component (for ML dashboards)
 function MetricCards({ metrics, colors }) {
-  if (!metrics || metrics.length === 0) return null
+  if (!Array.isArray(metrics) || metrics.length === 0) return null
 
   return (
     <div className="metric-cards">
@@ -361,7 +361,7 @@ function MetricCards({ metrics, colors }) {
 
 // Chart Grid Component
 function ChartGrid({ charts, colors }) {
-  if (!charts || charts.length === 0) return null
+  if (!Array.isArray(charts) || charts.length === 0) return null
 
   return (
     <div className="chart-grid">
@@ -432,12 +432,12 @@ function ResponsiveChart({ chart, colors }) {
       )
     
     case 'histogram':
-      const histData = chart.data?.counts ? 
+      const histData = (chart.data?.counts && chart.data?.bins) ? 
         chart.data.counts.map((count, i) => ({
-          bin: `${chart.data.bins[i].toFixed(1)}-${chart.data.bins[i+1]?.toFixed(1) || ''}`,
+          bin: `${chart.data.bins[i]?.toFixed?.(1) || chart.data.bins[i]}-${chart.data.bins[i+1]?.toFixed?.(1) || chart.data.bins[i+1] || ''}`,
           count
         })) :
-        chart.data?.values?.slice(0, 30).map((v, i) => ({ bin: i, count: v })) || []
+        (Array.isArray(chart.data?.values) ? chart.data.values.slice(0, 30).map((v, i) => ({ bin: i, count: v })) : [])
       
       return (
         <ResponsiveContainer width="100%" height={300}>
@@ -540,9 +540,9 @@ function HeatmapChart({ data, colors }) {
 
 // Data Table Component
 function DataTable({ data, columns }) {
-  if (!data || data.length === 0) return <p>No data available</p>
+  if (!Array.isArray(data) || data.length === 0) return <p>No data available</p>
 
-  const cols = columns || Object.keys(data[0] || {})
+  const cols = Array.isArray(columns) ? columns : Object.keys(data[0] || {})
 
   return (
     <div className="data-table-container">
@@ -573,7 +573,7 @@ function DataTable({ data, columns }) {
 
 // Scatter Plot Component
 function ScatterPlot({ data, colors }) {
-  if (!data || data.length === 0) return <p>No scatter data</p>
+  if (!Array.isArray(data) || data.length === 0) return <p>No scatter data</p>
 
   return (
     <ResponsiveContainer width="100%" height={400}>
@@ -782,7 +782,7 @@ function ErrorAnalysis({ data }) {
         </div>
       </div>
       
-      {data?.confused_pairs?.length > 0 && (
+      {Array.isArray(data?.confused_pairs) && data.confused_pairs.length > 0 && (
         <div className="confused-pairs">
           <h4>Most Confused Pairs</h4>
           <table>
