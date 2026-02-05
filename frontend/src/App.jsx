@@ -76,7 +76,23 @@ function MainApp() {
 
   const handleAnalysisComplete = (data) => {
     setAnalysisData(data)
-    setActivePage('dashboard')
+
+    // Intelligent Routing:
+    // If we only have a model file, go to Model Page
+    // If we have data (or data + model), go to Dashboard
+    const hasData = datasets.some(d => !d.metadata?.is_model)
+    const hasModel = datasets.some(d => d.metadata?.is_model)
+
+    if (hasModel && !hasData) {
+      console.log("Model-only session detected, routing to Model Page")
+      const model = datasets.find(d => d.metadata?.is_model)
+      setSelectedDataset(model)
+      setActivePage('model')
+    } else {
+      console.log("Data session detected, routing to Dashboard")
+      setActivePage('dashboard')
+    }
+
     fetchSessions()
   }
 
