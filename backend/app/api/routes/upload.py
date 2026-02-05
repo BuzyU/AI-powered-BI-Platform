@@ -55,16 +55,8 @@ def get_file_extension(filename: str) -> str:
     return filename.rsplit('.', 1)[-1].lower() if '.' in filename else ''
 
 
-def validate_session_id(session_id: str) -> str:
-    """Validate session ID format to prevent path traversal and ensure safety."""
-    import re
-    # Allow valid UUIDs or the default_session
-    uuid_pattern = r'^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$'
-    if session_id == "default_session":
-        return session_id
-    if not re.match(uuid_pattern, session_id, re.I):
-        raise HTTPException(400, "Invalid session ID format. Must be a valid UUID.")
-    return session_id
+# Import centralized session validation from deps
+from app.api.deps import validate_session_id, get_validated_session_id
 
 
 # ============== SESSION ROUTES ==============
@@ -180,10 +172,12 @@ async def test_supabase_upload():
         return result
     except Exception as e:
         import traceback
+        import logging
+        logging.error(f"Debug storage test error: {traceback.format_exc()}")
         return {
             "success": False,
-            "error": str(e),
-            "traceback": traceback.format_exc()
+            "error": str(e)
+            # Note: traceback removed for security - check server logs
         }
 
 
@@ -633,39 +627,11 @@ async def python_plot(
     request: PythonPlotRequest,
     x_session_id: str = Header("default_session")
 ):
-    df = None
-    if request.dataset_id:
-        df = state.get_dataset_df(x_session_id, request.dataset_id)
-    else:
-        datasets = state.get_all_datasets(x_session_id)
-        if datasets:
-            df = state.get_dataset_df(x_session_id, datasets[0]['id'])
-            
-    if df is None: raise HTTPException(400, "Dataset not found")
-    
-    # SECURITY: Comprehensive code sanitization
-    # This endpoint is disabled for security reasons - arbitrary code execution is dangerous
-    dangerous_patterns = [
-        'import os', 'import sys', 'subprocess', '__import__', 'eval(', 'exec(',
-        'open(', 'file(', 'input(', 'compile(', 'globals(', 'locals(',
-        '__builtins__', '__code__', '__class__', 'getattr(', 'setattr(',
-        'delattr(', 'hasattr(', 'vars(', 'dir(', 'type(', 'object',
-        '.read(', '.write(', 'os.', 'sys.', 'shutil', 'pathlib', 'socket',
-        'requests', 'urllib', 'http', 'ftplib', 'telnetlib', 'pickle',
-        'marshal', 'shelve', 'dbm', 'sqlite', 'ctypes', 'multiprocessing',
-        'threading', 'asyncio', 'concurrent', 'cmd', 'code', 'codeop',
-        'breakpoint', 'help(', 'exit(', 'quit(', 'license(', 'copyright(',
-        'credits(', 'chr(', 'ord(', 'bytes(', 'bytearray(', 'memoryview(',
-        '\\x', '\\u', '__dict__', '__bases__', '__mro__', '__subclasses__'
-    ]
-    
-    code_lower = request.code.lower()
-    for pattern in dangerous_patterns:
-        if pattern.lower() in code_lower:
-            raise HTTPException(400, f"Unsafe code pattern detected: '{pattern}'. This feature is restricted for security.")
-    
-    # Only allow simple plotting operations with pandas/matplotlib
-    allowed_imports = ['import matplotlib', 'import seaborn', 'import numpy as np']
-    
-    img = analyzer.execute_custom_plot(df, request.code)
-    return {'image': f"data:image/png;base64,{img}"}
+    # SECURITY: This endpoint is DISABLED due to inherent risks with code execution
+    # Blacklist-based filtering cannot make exec() safe - attackers can bypass via:
+    # - Unicode escapes, base64 encoding, getattr chains, __class__.__mro__ exploitation
+    # Enable only if running in a sandboxed container environment
+    raise HTTPException(
+        503,
+        "Python code execution is disabled for security. Use pre-built chart endpoints instead."
+    )

@@ -90,7 +90,15 @@ class ModelService:
             }
     
     def _load_pickle_model(self, path: Path) -> tuple:
-        """Load a pickled sklearn model."""
+        """Load a pickled sklearn model.
+        
+        WARNING: Pickle deserialization can execute arbitrary code.
+        Only load models from TRUSTED sources. In production, consider:
+        - Using SafeTensors for deep learning models
+        - Using ONNX format for cross-framework compatibility
+        - Validating file checksums before loading
+        """
+        logger.warning(f"Loading pickle file {path.name} - ensure this is from a trusted source")
         with open(path, 'rb') as f:
             model = pickle.load(f)
         
@@ -208,8 +216,13 @@ class ModelService:
         try:
             import torch
             
-            # Try loading as state_dict first
-            model = torch.load(str(path), map_location='cpu', weights_only=False)
+            # Try loading with weights_only=True for security (prevents arbitrary code execution)
+            # Set weights_only=False only for trusted legacy models
+            try:
+                model = torch.load(str(path), map_location='cpu', weights_only=True)
+            except Exception:
+                logger.warning(f"Loading {path.name} with weights_only=False - ensure trusted source")
+                model = torch.load(str(path), map_location='cpu', weights_only=False)
             
             info = {
                 'framework': 'pytorch',
