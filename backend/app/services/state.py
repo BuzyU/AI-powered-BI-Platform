@@ -372,6 +372,10 @@ def store_dataset(session_id: str, dataset_id: str, dataset_info: Dict[str, Any]
     dataset_info["uploaded_at"] = datetime.now().isoformat()
     session.datasets[dataset_id] = dataset_info
     
+    # Clear cached dashboard/analysis when datasets change
+    session.dashboard_config = None
+    session.analysis = None
+    
     session.update_timestamp()
     session.name = session.generate_name()
     _persist_session_metadata(session)
@@ -413,6 +417,9 @@ def update_dataset_df(session_id: str, dataset_id: str, df: pd.DataFrame):
     session = get_session(session_id)
     session._dfs[dataset_id] = df
     _persist_dataframe(session_id, dataset_id, df)
+    # Clear cached dashboard/analysis when data changes
+    session.dashboard_config = None
+    session.analysis = None
     session.update_timestamp()
     _persist_session_metadata(session)
 
@@ -436,6 +443,10 @@ def delete_dataset(session_id: str, dataset_id: str) -> bool:
             df_file.unlink()
         except Exception as e:
             logger.error(f"Failed to delete dataframe file: {e}")
+    
+    # Clear cached dashboard/analysis when datasets change
+    session.dashboard_config = None
+    session.analysis = None
     
     session.update_timestamp()
     _persist_session_metadata(session)
