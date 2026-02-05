@@ -83,7 +83,7 @@ function MainApp() {
   const handleViewProfile = (datasetId) => {
     const dataset = datasets.find(d => d.id === datasetId)
     setSelectedDataset(dataset)
-    
+
     // Check if it's a model file
     if (dataset?.metadata?.is_model) {
       setActivePage('model')
@@ -130,7 +130,7 @@ function MainApp() {
           <EnhancedDashboard />
         )
       case 'chat':
-        return <ChatPage />
+        return <ChatPage analysisData={analysisData} />
       default:
         return <UploadPage />
     }
@@ -139,7 +139,7 @@ function MainApp() {
   return (
     <div className="app-container">
       {/* Sidebar with Sessions */}
-      <Sidebar 
+      <Sidebar
         currentPage={activePage}
         onNavigate={handleNavigate}
         analysisComplete={!!analysisData}
