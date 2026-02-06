@@ -1,25 +1,21 @@
-# Enhanced Persona Detection Engine
-# Comprehensive detection for Business, Analytics, ML, and Computer Vision
+# Persona Detection Engine
+# Detects WHO is using the system based on WHAT they uploaded
 
-from typing import Dict, List, Any, Optional, Tuple, Set
+from typing import Dict, List, Any, Optional, Tuple
 from enum import Enum
 from dataclasses import dataclass, field
 import pandas as pd
-import numpy as np
 import re
-import logging
-
-logger = logging.getLogger(__name__)
+from app.layers.l2_classification.content_classifier import classifier, ContentType, ContentCategory
 
 
 class UserPersona(Enum):
     """Primary user personas based on upload patterns."""
-    BUSINESS = "business"               # Sales, CRM, Finance, Operations
-    ANALYTICS = "analytics"             # EDA, Research, Statistical Analysis
-    ML_ENGINEER = "ml_engineer"         # ML Models, Predictions, Training Data
-    COMPUTER_VISION = "computer_vision" # Image classification, Object Detection
-    DATA_SCIENTIST = "data_scientist"   # Mix of analytics + ML
-    DEVELOPER = "developer"             # API logs, System data
+    BUSINESS = "business"           # Sales, CRM, Finance, Operations
+    ANALYTICS = "analytics"         # EDA, Research, Statistical Analysis
+    ML_ENGINEER = "ml_engineer"     # Models, Predictions, Training Data
+    DATA_SCIENTIST = "data_scientist"  # Mix of analytics + ML
+    DEVELOPER = "developer"         # API logs, System data
     UNKNOWN = "unknown"
 
 
@@ -49,26 +45,21 @@ class DataCategory(Enum):
     EMBEDDINGS = "embeddings"
     FEATURE_DATA = "feature_data"
     
-    # Computer Vision Data
-    IMAGE_DATA = "image_data"
-    OBJECT_DETECTION = "object_detection"
-    IMAGE_CLASSIFICATION = "image_classification"
-    SEGMENTATION = "segmentation"
-    
     # Generic
     TABULAR_DATA = "tabular_data"
     UNKNOWN = "unknown"
 
 
-class DashboardType(Enum):
-    """Dashboard types for different personas."""
-    POWER_BI_STYLE = "power_bi_style"           # Business KPIs, revenue, profit
-    EDA_ANALYTICS = "eda_analytics"              # Statistical analysis, distributions
-    ML_METRICS = "ml_metrics"                    # Confusion matrix, ROC, metrics
-    CV_DASHBOARD = "cv_dashboard"                # Image metrics, detection results
-    DATA_SCIENCE = "data_science"                # Mix of EDA + ML
-    DEVELOPER = "developer"                      # Logs, system metrics
-    GENERAL = "general"
+class DashboardType(str, Enum):
+    """Type of dashboard layout/template."""
+    BUSINESS = "power_bi_style"
+    ANALYTICS = "eda_analytics"
+    ML_METRICS = "ml_metrics"
+    CV_DASHBOARD = "cv_dashboard"
+    DATA_SCIENCE = "data_science"
+    DEVELOPER = "developer_dashboard"
+    GENERAL = "general_dashboard"
+    MODEL = "ml_model_dashboard"
 
 
 @dataclass
@@ -80,725 +71,338 @@ class PersonaDetectionResult:
     detected_domains: List[str]
     recommended_analysis: List[str]
     dashboard_type: DashboardType
-    dashboard_config: Dict[str, Any]
     summary: str
-    
+
     def to_dict(self) -> Dict[str, Any]:
+        """Convert result to dictionary."""
         return {
-            'persona': self.persona.value,
+            'persona': self.persona.value if isinstance(self.persona, Enum) else self.persona,
             'confidence': self.confidence,
-            'data_categories': [c.value for c in self.data_categories],
+            'data_categories': [c.value if isinstance(c, Enum) else c for c in self.data_categories],
             'detected_domains': self.detected_domains,
             'recommended_analysis': self.recommended_analysis,
-            'dashboard_type': self.dashboard_type.value,
-            'dashboard_config': self.dashboard_config,
+            'dashboard_type': self.dashboard_type.value if isinstance(self.dashboard_type, Enum) else self.dashboard_type,
             'summary': self.summary
         }
 
 
-class EnhancedPersonaDetector:
+class PersonaDetector:
     """
-    Enhanced persona detector with support for:
-    - Business Analytics (Power BI style)
-    - Data Analytics (EDA style)
-    - ML Models (Classification/Regression metrics)
-    - Computer Vision (Object Detection, Image Classification)
+    Detects the user persona and data category based on uploaded files.
+    This determines what kind of dashboard and analysis to show.
     """
     
     def __init__(self):
-        self._init_all_indicators()
+        self.business_indicators = self._init_business_indicators()
+        self.analytics_indicators = self._init_analytics_indicators()
+        self.ml_indicators = self._init_ml_indicators()
     
-    def _init_all_indicators(self):
-        """Initialize all detection patterns."""
-        self.business_indicators = {
-            'sales': {
-                'columns': ['sale', 'revenue', 'order', 'transaction', 'invoice', 
-                           'deal', 'booking', 'purchase', 'gross', 'net'],
-                'filename': ['sales', 'orders', 'transactions', 'revenue'],
-                'weight': 2.0
-            },
-            'customer': {
-                'columns': ['customer', 'client', 'buyer', 'subscriber', 'member', 
-                           'user_id', 'account', 'contact', 'lead', 'prospect'],
-                'filename': ['customers', 'clients', 'crm', 'contacts'],
-                'weight': 2.0
-            },
-            'product': {
-                'columns': ['product', 'item', 'sku', 'catalog', 'inventory', 
-                           'stock', 'merchandise', 'goods', 'upc'],
-                'filename': ['products', 'inventory', 'catalog', 'items'],
-                'weight': 1.5
-            },
-            'financial': {
-                'columns': ['profit', 'cost', 'expense', 'budget', 'balance', 
-                           'payment', 'tax', 'margin', 'ebitda', 'roi', 'cogs'],
-                'filename': ['finance', 'budget', 'expenses', 'accounting', 'profit'],
-                'weight': 2.5
-            },
-            'hr': {
-                'columns': ['employee', 'salary', 'department', 'hire', 'position', 
-                           'payroll', 'attendance', 'leave', 'bonus', 'benefits'],
-                'filename': ['hr', 'employees', 'payroll', 'workforce'],
-                'weight': 1.5
-            },
-            'marketing': {
-                'columns': ['campaign', 'lead', 'conversion', 'click', 'impression', 
-                           'ad_', 'promo', 'ctr', 'cpc', 'roi', 'attribution'],
-                'filename': ['marketing', 'campaigns', 'ads', 'promotions'],
-                'weight': 1.5
-            },
-            'operations': {
-                'columns': ['branch', 'store', 'warehouse', 'location', 'region', 
-                           'territory', 'supply', 'logistics', 'shipment'],
-                'filename': ['operations', 'logistics', 'supply_chain'],
-                'weight': 1.5
-            }
+    def _init_business_indicators(self) -> Dict[str, List[str]]:
+        """Business-related column/filename patterns."""
+        return {
+            'sales': ['sale', 'revenue', 'order', 'transaction', 'invoice', 'deal', 'booking'],
+            'customer': ['customer', 'client', 'buyer', 'subscriber', 'member', 'user_id', 'account'],
+            'product': ['product', 'item', 'sku', 'catalog', 'inventory', 'stock', 'merchandise'],
+            'financial': ['profit', 'cost', 'expense', 'budget', 'balance', 'payment', 'invoice', 'tax'],
+            'hr': ['employee', 'salary', 'department', 'hire', 'position', 'payroll', 'attendance'],
+            'marketing': ['campaign', 'lead', 'conversion', 'click', 'impression', 'ad_', 'promo'],
+            'operations': ['branch', 'store', 'warehouse', 'location', 'region', 'territory', 'supply']
         }
-        
-        self.analytics_indicators = {
-            'survey': {
-                'columns': ['response', 'survey', 'rating', 'score', 'feedback', 
-                           'opinion', 'satisfaction', 'nps', 'likert'],
-                'filename': ['survey', 'responses', 'feedback', 'ratings'],
-                'weight': 1.5
-            },
-            'research': {
-                'columns': ['experiment', 'control', 'treatment', 'sample', 
-                           'observation', 'study', 'trial', 'cohort', 'group'],
-                'filename': ['research', 'experiment', 'study', 'trial'],
-                'weight': 1.5
-            },
-            'time_series': {
-                'columns': ['timestamp', 'datetime', 'date', 'time', 'period', 
-                           'interval', 'frequency', 'month', 'year', 'quarter'],
-                'filename': ['timeseries', 'time_series', 'historical'],
-                'weight': 1.0
-            },
-            'geographic': {
-                'columns': ['latitude', 'longitude', 'lat', 'lng', 'geo', 
-                           'location', 'city', 'country', 'state', 'zip', 'postal'],
-                'filename': ['geo', 'location', 'geographic', 'map'],
-                'weight': 1.0
-            },
-            'sensor': {
-                'columns': ['sensor', 'reading', 'measurement', 'temperature', 
-                           'humidity', 'pressure', 'aqi', 'pollution', 'voltage'],
-                'filename': ['sensor', 'iot', 'readings', 'telemetry'],
-                'weight': 1.5
-            },
-            'statistical': {
-                'columns': ['mean', 'median', 'std', 'variance', 'correlation', 
-                           'distribution', 'percentile', 'quantile'],
-                'filename': ['statistics', 'analysis'],
-                'weight': 1.0
-            }
+    
+    def _init_analytics_indicators(self) -> Dict[str, List[str]]:
+        """Analytics/Research data patterns."""
+        return {
+            'survey': ['response', 'survey', 'rating', 'score', 'feedback', 'opinion', 'satisfaction'],
+            'research': ['experiment', 'control', 'treatment', 'sample', 'observation', 'study'],
+            'time_series': ['timestamp', 'datetime', 'date', 'time', 'period', 'interval', 'frequency'],
+            'geographic': ['latitude', 'longitude', 'lat', 'lng', 'geo', 'location', 'city', 'country', 'state'],
+            'sensor': ['sensor', 'reading', 'measurement', 'temperature', 'humidity', 'pressure', 'aqi', 'pollution'],
+            'statistical': ['mean', 'median', 'std', 'variance', 'correlation', 'distribution']
         }
-        
-        self.ml_indicators = {
-            'training': {
-                'columns': ['feature', 'label', 'target', 'train', 'test', 
-                           'validation', 'split', 'fold', 'stratify'],
-                'filename': ['train', 'training', 'dataset', 'features'],
-                'weight': 2.0
-            },
-            'prediction': {
-                'columns': ['prediction', 'predicted', 'probability', 'confidence', 
-                           'score', 'output', 'proba', 'logit'],
-                'filename': ['predictions', 'output', 'results', 'inference'],
-                'weight': 2.5
-            },
-            'classification': {
-                'columns': ['class', 'category', 'label', 'y_true', 'y_pred', 
-                           'classification', 'true_label', 'pred_label'],
-                'filename': ['classification', 'classes', 'labels'],
-                'weight': 2.0
-            },
-            'regression': {
-                'columns': ['actual', 'predicted', 'error', 'residual', 'mse', 
-                           'rmse', 'mae', 'r2', 'explained_variance'],
-                'filename': ['regression', 'forecast'],
-                'weight': 2.0
-            },
-            'embedding': {
-                'columns': ['embedding', 'vector', 'representation', 'encoding', 
-                           'latent', 'dim_', 'pca', 'tsne', 'umap'],
-                'filename': ['embeddings', 'vectors', 'encoded'],
-                'weight': 1.5
-            },
-            'model_meta': {
-                'columns': ['epoch', 'loss', 'accuracy', 'precision', 'recall', 
-                           'f1', 'auc', 'roc', 'learning_rate', 'batch'],
-                'filename': ['metrics', 'training_log', 'evaluation'],
-                'weight': 2.0
-            }
-        }
-        
-        self.cv_indicators = {
-            'object_detection': {
-                'columns': ['bbox', 'bounding_box', 'x1', 'y1', 'x2', 'y2', 
-                           'xmin', 'ymin', 'xmax', 'ymax', 'obj_width', 'obj_height',
-                           'iou', 'map', 'detection_score', 'anchor_box'],
-                'filename': ['detection', 'bbox', 'objects', 'yolo', 'coco', 'annotations'],
-                'weight': 3.0
-            },
-            'image_classification': {
-                'columns': ['image_id', 'image_path', 'img_path', 'image_file',
-                           'class_name', 'class_id', 'top_1', 'top_5', 'predicted_class'],
-                'filename': ['imagenet', 'classification', 'cifar', 'mnist', 'image_labels'],
-                'weight': 2.5
-            },
-            'segmentation': {
-                'columns': ['mask', 'seg_mask', 'pixel_mask', 'dice_score', 
-                           'jaccard_score', 'pixel_overlap', 'seg_boundary', 'instance_id'],
-                'filename': ['segmentation', 'mask', 'semantic_seg', 'instance_seg'],
-                'weight': 2.5
-            },
-            'image_features': {
-                'columns': ['image_feature', 'visual_feature', 'cnn_feature', 'resnet_feat',
-                           'vgg_feat', 'inception_feat', 'efficientnet_feat', 'pooling_feat'],
-                'filename': ['features', 'cnn_features', 'image_embeddings'],
-                'weight': 2.0
-            }
-        }
-        
-        self.developer_indicators = {
-            'logs': {
-                'columns': ['log', 'message', 'level', 'error', 'warning', 
-                           'info', 'debug', 'trace', 'stack'],
-                'filename': ['log', 'logs', 'errors', 'debug'],
-                'weight': 2.0
-            },
-            'api': {
-                'columns': ['request', 'response', 'endpoint', 'method', 'status',
-                           'latency', 'duration', 'path', 'url'],
-                'filename': ['api', 'requests', 'traffic'],
-                'weight': 2.0
-            },
-            'system': {
-                'columns': ['cpu', 'memory', 'disk', 'network', 'process',
-                           'thread', 'connection', 'socket'],
-                'filename': ['system', 'metrics', 'monitoring'],
-                'weight': 1.5
-            }
+    
+    def _init_ml_indicators(self) -> Dict[str, List[str]]:
+        """ML/Model related patterns."""
+        return {
+            'training': ['feature', 'label', 'target', 'train', 'test', 'validation', 'split'],
+            'prediction': ['prediction', 'predicted', 'probability', 'confidence', 'score', 'output'],
+            'classification': ['class', 'category', 'label', 'y_true', 'y_pred', 'classification'],
+            'regression': ['actual', 'predicted', 'error', 'residual', 'mse', 'rmse', 'mae'],
+            'embedding': ['embedding', 'vector', 'representation', 'encoding', 'latent'],
+            'model_meta': ['epoch', 'loss', 'accuracy', 'precision', 'recall', 'f1', 'auc']
         }
     
     def detect_persona(
         self,
         datasets: List[Dict[str, Any]],
+        classifications: List[Dict[str, Any]] = None,
         model_info: Optional[Dict[str, Any]] = None
     ) -> PersonaDetectionResult:
         """
-        Detect user persona based on uploaded datasets and model info.
+        Detect user persona based on uploaded datasets.
+        
+        Args:
+            datasets: List of dataset info with 'filename', 'df', 'metadata'
+            classifications: Optional existing classifications
+            model_info: Optional detected model information
+        
+        Returns:
+            PersonaDetectionResult with persona and recommendations
         """
         scores = {
             UserPersona.BUSINESS: 0.0,
             UserPersona.ANALYTICS: 0.0,
             UserPersona.ML_ENGINEER: 0.0,
-            UserPersona.COMPUTER_VISION: 0.0,
             UserPersona.DATA_SCIENTIST: 0.0,
             UserPersona.DEVELOPER: 0.0
         }
         
-        detected_categories: Set[DataCategory] = set()
-        detected_domains: Set[str] = set()
+        detected_categories = []
+        detected_domains = []
         
-        # Check if model was uploaded
-        if model_info and model_info.get('is_model'):
-            model_type = model_info.get('model_type', '').lower()
-            
-            # Check if it's a CV model
-            cv_model_types = ['image', 'vision', 'cnn', 'resnet', 'vgg', 'yolo', 
-                             'faster_rcnn', 'efficientnet', 'unet', 'detection']
-            is_cv_model = any(cv_type in model_type for cv_type in cv_model_types)
-            
-            if is_cv_model:
-                scores[UserPersona.COMPUTER_VISION] += 8.0
-                detected_categories.add(DataCategory.MODEL_FILE)
-                detected_categories.add(DataCategory.IMAGE_CLASSIFICATION)
-                detected_domains.add('Computer Vision')
-            else:
-                scores[UserPersona.ML_ENGINEER] += 5.0
-                detected_categories.add(DataCategory.MODEL_FILE)
-                detected_domains.add('Machine Learning')
-        
-        # Analyze each dataset
+        # Boost ML score if model info is present
+        if model_info:
+            scores[UserPersona.ML_ENGINEER] += 5.0
+            detected_categories.append(DataCategory.MODEL_FILE)
+            detected_domains.append('Machine Learning')
+            if 'model_type' in model_info:
+                 detected_domains.append(f"Model/{model_info['model_type']}")
+
         for ds in datasets:
             filename = ds.get('filename', '').lower()
             metadata = ds.get('metadata', {})
             df = ds.get('df')
             
-            # Check if this dataset is a model file (from metadata)
-            if metadata.get('is_model') and not model_info:
-                model_type = metadata.get('model_type', '').lower()
-                cv_model_types = ['image', 'vision', 'cnn', 'resnet', 'vgg', 'yolo', 
-                                 'faster_rcnn', 'efficientnet', 'unet', 'detection']
-                is_cv_model = any(cv_type in model_type for cv_type in cv_model_types)
-                
-                if is_cv_model:
-                    scores[UserPersona.COMPUTER_VISION] += 8.0
-                    detected_categories.add(DataCategory.MODEL_FILE)
-                    detected_categories.add(DataCategory.IMAGE_CLASSIFICATION)
-                    detected_domains.add('Computer Vision')
-                else:
-                    scores[UserPersona.ML_ENGINEER] += 5.0
-                    detected_categories.add(DataCategory.MODEL_FILE)
-                    detected_domains.add('Machine Learning')
-                continue  # Skip column analysis for model files
+            # Check if it's a model file
+            if metadata.get('is_model'):
+                scores[UserPersona.ML_ENGINEER] += 5.0
+                detected_categories.append(DataCategory.MODEL_FILE)
+                detected_domains.append('Machine Learning')
+                continue
             
             if df is None:
                 continue
             
-            columns = [c.lower() for c in df.columns]
-            col_text = ' '.join(columns)
+            # --- INTENT ENGINE INTEGRATION ---
+            # Use SmartContentClassifier to detect specific content type
+            classification = classifier.classify(df, filename)
+            content_type_str = classification.get('content_type')
+            confidence = classification.get('confidence', 0)
             
-            # Check for CV data first (highest specificity)
-            cv_score, cv_domains, cv_cats = self._score_indicators(
-                columns, filename, self.cv_indicators
-            )
-            if cv_score > 0:
-                scores[UserPersona.COMPUTER_VISION] += cv_score
-                detected_domains.update(cv_domains)
-                detected_categories.update(cv_cats)
+            # Map ContentType to UserPersona
+            try:
+                content_type = ContentType(content_type_str)
+            except ValueError:
+                content_type = ContentType.UNKNOWN
+
+            # Business Data Types
+            if content_type in [
+                ContentType.SALES_TRANSACTIONS, ContentType.PRODUCTS_CATALOG, 
+                ContentType.SERVICES_DATA, ContentType.SUBSCRIPTIONS, ContentType.CUSTOMERS,
+                ContentType.EVENTS, ContentType.BUNDLES_PACKAGES, ContentType.LICENSES,
+                ContentType.MEMBERSHIPS, ContentType.RENTALS, ContentType.INVOICES,
+                ContentType.ORDERS, ContentType.EMPLOYEES, ContentType.SUPPLIERS,
+                ContentType.FINANCIAL_DATA, ContentType.INVENTORY, ContentType.OPERATIONAL_DATA,
+                ContentType.MARKETING_DATA, ContentType.LEGAL_CASES, ContentType.CONTRACTS
+            ]:
+                # Use confidence to weight the score
+                weight = confidence / 100.0 * 2.5
+                scores[UserPersona.BUSINESS] += weight
+                detected_domains.append(f"Business/{content_type.value.replace('_', ' ').title()}")
+                detected_categories.append(self._domain_to_category(content_type.value, 'business'))
+
+            # Analytics Data Types
+            elif content_type in [
+                ContentType.METRICS_KPI, ContentType.TIME_SERIES, ContentType.SURVEY_DATA,
+                ContentType.CUSTOMER_FEEDBACK, ContentType.AI_ANALYTICS
+            ]:
+                weight = confidence / 100.0 * 2.5
+                scores[UserPersona.ANALYTICS] += weight
+                detected_domains.append(f"Analytics/{content_type.value.replace('_', ' ').title()}")
+                detected_categories.append(self._domain_to_category(content_type.value, 'analytics'))
+            
+            # ML Data Types
+            elif content_type in [
+                ContentType.TRAINING_DATASET, ContentType.EMBEDDINGS, ContentType.MODEL_WEIGHTS,
+                ContentType.TRANSFORMER_MODEL, ContentType.CLASSIFICATION_MODEL, ContentType.REGRESSION_MODEL
+            ]:
+                weight = confidence / 100.0 * 3.0
+                scores[UserPersona.ML_ENGINEER] += weight
+                detected_domains.append(f"ML/{content_type.value.replace('_', ' ').title()}")
+                detected_categories.append(self._domain_to_category(content_type.value, 'ml'))
+            
+            # Support/Dev Types
+            elif content_type in [ContentType.SUPPORT_TICKETS, ContentType.USAGE_DATA]:
+                 scores[UserPersona.BUSINESS] += confidence / 100.0
+                 scores[UserPersona.DEVELOPER] += confidence / 100.0
+                 detected_domains.append(f"Service/{content_type.value.replace('_', ' ').title()}")
+
+            # Fallback for Unknown (legacy keyword check as backup)
+            if content_type == ContentType.UNKNOWN:
+                columns = [c.lower() for c in df.columns]
+                # Score business indicators
+                for domain, keywords in self.business_indicators.items():
+                    matches = sum(1 for kw in keywords for col in columns if kw in col)
+                    filename_matches = sum(1 for kw in keywords if kw in filename)
+                    if matches > 0 or filename_matches > 0:
+                        scores[UserPersona.BUSINESS] += matches * 0.5 + filename_matches * 1.0
+                        detected_domains.append(f"Business/{domain.title()}")
+                        detected_categories.append(self._domain_to_category(domain, 'business'))
                 
-                # Additional CV-specific checks
-                if self._has_image_paths(df):
-                    scores[UserPersona.COMPUTER_VISION] += 2.0
-                    detected_categories.add(DataCategory.IMAGE_DATA)
+                # Score analytics indicators
+                for domain, keywords in self.analytics_indicators.items():
+                    matches = sum(1 for kw in keywords for col in columns if kw in col)
+                    filename_matches = sum(1 for kw in keywords if kw in filename)
+                    if matches > 0 or filename_matches > 0:
+                        scores[UserPersona.ANALYTICS] += matches * 0.5 + filename_matches * 1.0
+                        detected_domains.append(f"Analytics/{domain.title()}")
+                        detected_categories.append(self._domain_to_category(domain, 'analytics'))
                 
-                if self._has_bbox_columns(df):
-                    scores[UserPersona.COMPUTER_VISION] += 3.0
-                    detected_categories.add(DataCategory.OBJECT_DETECTION)
+                # Score ML indicators
+                for domain, keywords in self.ml_indicators.items():
+                    matches = sum(1 for kw in keywords for col in columns if kw in col)
+                    filename_matches = sum(1 for kw in keywords if kw in filename)
+                    if matches > 0 or filename_matches > 0:
+                        scores[UserPersona.ML_ENGINEER] += matches * 0.5 + filename_matches * 1.0
+                        detected_domains.append(f"ML/{domain.title()}")
+                        detected_categories.append(self._domain_to_category(domain, 'ml'))
             
-            # Score ML indicators
-            ml_score, ml_domains, ml_cats = self._score_indicators(
-                columns, filename, self.ml_indicators
-            )
-            if ml_score > 0:
-                scores[UserPersona.ML_ENGINEER] += ml_score
-                detected_domains.update(ml_domains)
-                detected_categories.update(ml_cats)
-            
-            # Score business indicators
-            biz_score, biz_domains, biz_cats = self._score_indicators(
-                columns, filename, self.business_indicators
-            )
-            if biz_score > 0:
-                scores[UserPersona.BUSINESS] += biz_score
-                detected_domains.update(biz_domains)
-                detected_categories.update(biz_cats)
-            
-            # Score analytics indicators
-            ana_score, ana_domains, ana_cats = self._score_indicators(
-                columns, filename, self.analytics_indicators
-            )
-            if ana_score > 0:
-                scores[UserPersona.ANALYTICS] += ana_score
-                detected_domains.update(ana_domains)
-                detected_categories.update(ana_cats)
-            
-            # Score developer indicators
-            dev_score, dev_domains, dev_cats = self._score_indicators(
-                columns, filename, self.developer_indicators
-            )
-            if dev_score > 0:
-                scores[UserPersona.DEVELOPER] += dev_score
-                detected_domains.update(dev_domains)
-                detected_categories.update(dev_cats)
-            
-            # Check data characteristics for additional signals
-            self._score_by_data_characteristics(df, scores, detected_categories)
-        
-        # Data Scientist detection (mix of analytics + ML)
-        if scores[UserPersona.ANALYTICS] > 2 and scores[UserPersona.ML_ENGINEER] > 2:
-            scores[UserPersona.DATA_SCIENTIST] = (
-                scores[UserPersona.ANALYTICS] + scores[UserPersona.ML_ENGINEER]
-            ) * 0.7
+            # Check for mixed signals (Data Scientist)
+            if scores[UserPersona.ANALYTICS] > 0 and scores[UserPersona.ML_ENGINEER] > 0:
+                scores[UserPersona.DATA_SCIENTIST] = (scores[UserPersona.ANALYTICS] + scores[UserPersona.ML_ENGINEER]) * 0.8
         
         # Determine primary persona
         if not any(scores.values()):
+            # Default to analytics if nothing detected
             scores[UserPersona.ANALYTICS] = 1.0
-            detected_categories.add(DataCategory.TABULAR_DATA)
+            detected_categories.append(DataCategory.TABULAR_DATA)
         
         primary_persona = max(scores, key=scores.get)
         total_score = sum(scores.values())
         confidence = scores[primary_persona] / total_score if total_score > 0 else 0.5
         
-        # Get dashboard config based on persona
-        dashboard_type = self._get_dashboard_type(primary_persona, detected_categories)
-        dashboard_config = self._get_dashboard_config(
-            primary_persona, dashboard_type, list(detected_categories)
-        )
-        
+        # Get recommendations
         recommended = self._get_recommendations(primary_persona, detected_categories)
+        dashboard_type = self._get_dashboard_type(primary_persona, detected_categories)
         summary = self._generate_summary(primary_persona, detected_domains, datasets)
         
         return PersonaDetectionResult(
             persona=primary_persona,
             confidence=min(confidence, 1.0),
-            data_categories=list(detected_categories),
-            detected_domains=list(detected_domains),
+            data_categories=list(set(detected_categories)),
+            detected_domains=list(set(detected_domains)),
             recommended_analysis=recommended,
             dashboard_type=dashboard_type,
-            dashboard_config=dashboard_config,
             summary=summary
         )
     
-    def _score_indicators(
-        self, 
-        columns: List[str], 
-        filename: str, 
-        indicators: Dict
-    ) -> Tuple[float, Set[str], Set[DataCategory]]:
-        """Score a set of indicators against columns and filename."""
-        total_score = 0.0
-        domains = set()
-        categories = set()
-        
-        for domain, config in indicators.items():
-            col_keywords = config['columns']
-            file_keywords = config['filename']
-            weight = config['weight']
-            
-            # Count column matches
-            col_matches = sum(
-                1 for kw in col_keywords 
-                for col in columns 
-                if kw in col
-            )
-            
-            # Count filename matches
-            file_matches = sum(1 for kw in file_keywords if kw in filename)
-            
-            if col_matches > 0 or file_matches > 0:
-                score = (col_matches * 0.3 + file_matches * 0.7) * weight
-                total_score += score
-                domains.add(domain.replace('_', ' ').title())
-                categories.add(self._domain_to_category(domain))
-        
-        return total_score, domains, categories
-    
-    def _domain_to_category(self, domain: str) -> DataCategory:
-        """Map domain string to DataCategory."""
+    def _domain_to_category(self, domain: str, category_type: str) -> DataCategory:
+        """Map domain to data category."""
         mapping = {
-            # Business
-            'sales': DataCategory.SALES_DATA,
-            'customer': DataCategory.CUSTOMER_DATA,
-            'product': DataCategory.PRODUCT_DATA,
-            'financial': DataCategory.FINANCIAL_DATA,
-            'hr': DataCategory.HR_DATA,
-            'marketing': DataCategory.MARKETING_DATA,
-            'operations': DataCategory.INVENTORY_DATA,
-            # Analytics
-            'survey': DataCategory.SURVEY_DATA,
-            'research': DataCategory.RESEARCH_DATA,
-            'time_series': DataCategory.TIME_SERIES,
-            'geographic': DataCategory.GEOGRAPHIC_DATA,
-            'sensor': DataCategory.SENSOR_DATA,
-            'statistical': DataCategory.STATISTICAL_DATA,
-            # ML
-            'training': DataCategory.TRAINING_DATA,
-            'prediction': DataCategory.PREDICTIONS,
-            'classification': DataCategory.PREDICTIONS,
-            'regression': DataCategory.PREDICTIONS,
-            'embedding': DataCategory.EMBEDDINGS,
-            'model_meta': DataCategory.FEATURE_DATA,
-            # CV
-            'object_detection': DataCategory.OBJECT_DETECTION,
-            'image_classification': DataCategory.IMAGE_CLASSIFICATION,
-            'segmentation': DataCategory.SEGMENTATION,
-            'image_features': DataCategory.IMAGE_DATA,
-            # Developer
-            'logs': DataCategory.TABULAR_DATA,
-            'api': DataCategory.TABULAR_DATA,
-            'system': DataCategory.SENSOR_DATA,
-        }
-        return mapping.get(domain, DataCategory.UNKNOWN)
-    
-    def _has_image_paths(self, df: pd.DataFrame) -> bool:
-        """Check if DataFrame contains image file paths."""
-        for col in df.columns:
-            if df[col].dtype == object:
-                sample = df[col].head(20).astype(str)
-                image_extensions = ('.jpg', '.jpeg', '.png', '.bmp', '.gif', '.tiff', '.webp')
-                if any(s.lower().endswith(image_extensions) for s in sample):
-                    return True
-        return False
-    
-    def _has_bbox_columns(self, df: pd.DataFrame) -> bool:
-        """Check if DataFrame has bounding box columns."""
-        bbox_patterns = ['x1', 'y1', 'x2', 'y2', 'xmin', 'ymin', 'xmax', 'ymax', 
-                        'bbox', 'left', 'top', 'right', 'bottom']
-        cols_lower = [c.lower() for c in df.columns]
-        
-        matches = sum(1 for p in bbox_patterns if any(p in c for c in cols_lower))
-        return matches >= 4
-    
-    def _score_by_data_characteristics(
-        self, 
-        df: pd.DataFrame, 
-        scores: Dict[UserPersona, float],
-        categories: Set[DataCategory]
-    ):
-        """Score based on data characteristics like column types, ranges, etc."""
-        n_cols = len(df.columns)
-        n_rows = len(df)
-        numeric_cols = df.select_dtypes(include=[np.number]).columns
-        n_numeric = len(numeric_cols)
-        
-        # High number of numeric features suggests ML/analytics
-        if n_numeric > 20:
-            scores[UserPersona.ML_ENGINEER] += 1.0
-            scores[UserPersona.DATA_SCIENTIST] += 0.5
-        
-        # Check for probability-like columns (0-1 range)
-        prob_cols = 0
-        for col in numeric_cols:
-            col_data = df[col].dropna()
-            if len(col_data) > 0:
-                if col_data.min() >= 0 and col_data.max() <= 1:
-                    prob_cols += 1
-        
-        if prob_cols >= 2:
-            scores[UserPersona.ML_ENGINEER] += 1.5
-            categories.add(DataCategory.PREDICTIONS)
-        
-        # Check for currency-like columns
-        for col in df.columns:
-            if df[col].dtype == object:
-                sample = df[col].head(10).astype(str)
-                if any('$' in s or '€' in s or '£' in s for s in sample):
-                    scores[UserPersona.BUSINESS] += 2.0
-                    categories.add(DataCategory.FINANCIAL_DATA)
-                    break
-    
-    def _get_dashboard_type(
-        self, 
-        persona: UserPersona, 
-        categories: Set[DataCategory]
-    ) -> DashboardType:
-        """Determine dashboard type based on persona and data categories."""
-        # CV requires STRONG evidence - multiple CV categories or CV persona
-        cv_cats = {DataCategory.IMAGE_DATA, DataCategory.OBJECT_DETECTION, 
-                   DataCategory.IMAGE_CLASSIFICATION, DataCategory.SEGMENTATION}
-        cv_matches = categories & cv_cats
-        
-        # Only use CV dashboard if:
-        # 1. Persona is explicitly CV, OR
-        # 2. Multiple CV categories detected (not just one weak match)
-        if persona == UserPersona.COMPUTER_VISION or len(cv_matches) >= 2:
-            return DashboardType.CV_DASHBOARD
-        
-        if DataCategory.MODEL_FILE in categories:
-            return DashboardType.ML_METRICS
-        
-        dashboard_map = {
-            UserPersona.BUSINESS: DashboardType.POWER_BI_STYLE,
-            UserPersona.ANALYTICS: DashboardType.EDA_ANALYTICS,
-            UserPersona.ML_ENGINEER: DashboardType.ML_METRICS,
-            UserPersona.COMPUTER_VISION: DashboardType.CV_DASHBOARD,
-            UserPersona.DATA_SCIENTIST: DashboardType.DATA_SCIENCE,
-            UserPersona.DEVELOPER: DashboardType.DEVELOPER,
-            UserPersona.UNKNOWN: DashboardType.GENERAL
-        }
-        return dashboard_map.get(persona, DashboardType.GENERAL)
-    
-    def _get_dashboard_config(
-        self, 
-        persona: UserPersona, 
-        dashboard_type: DashboardType,
-        categories: List[DataCategory]
-    ) -> Dict[str, Any]:
-        """Get dashboard configuration for the detected persona."""
-        
-        configs = {
-            DashboardType.POWER_BI_STYLE: {
-                'layout': 'business',
-                'components': [
-                    {'type': 'kpi_cards', 'metrics': ['revenue', 'profit', 'customers', 'orders']},
-                    {'type': 'trend_chart', 'title': 'Revenue Trend'},
-                    {'type': 'pie_chart', 'title': 'Sales Distribution'},
-                    {'type': 'bar_chart', 'title': 'Top Products/Categories'},
-                    {'type': 'comparison_chart', 'title': 'Regional Performance'},
-                    {'type': 'data_table', 'title': 'Recent Transactions'}
-                ],
-                'theme': 'professional',
-                'kpi_style': 'large_numbers',
-                'show_filters': True,
-                'show_date_range': True
+            'business': {
+                'sales': DataCategory.SALES_DATA,
+                'customer': DataCategory.CUSTOMER_DATA,
+                'product': DataCategory.PRODUCT_DATA,
+                'financial': DataCategory.FINANCIAL_DATA,
+                'hr': DataCategory.HR_DATA,
+                'marketing': DataCategory.MARKETING_DATA,
+                'operations': DataCategory.INVENTORY_DATA,
             },
-            DashboardType.EDA_ANALYTICS: {
-                'layout': 'analytics',
-                'components': [
-                    {'type': 'data_overview', 'metrics': ['rows', 'columns', 'missing', 'types']},
-                    {'type': 'distribution_plots', 'title': 'Column Distributions'},
-                    {'type': 'correlation_matrix', 'title': 'Correlation Analysis'},
-                    {'type': 'outlier_detection', 'title': 'Outlier Analysis'},
-                    {'type': 'missing_data', 'title': 'Missing Data Pattern'},
-                    {'type': 'descriptive_stats', 'title': 'Statistical Summary'},
-                    {'type': 'histogram_grid', 'title': 'Value Distributions'},
-                    {'type': 'box_plots', 'title': 'Distribution Comparison'}
-                ],
-                'theme': 'analytical',
-                'show_statistics': True,
-                'show_cleaning_suggestions': True
+            'analytics': {
+                'survey': DataCategory.SURVEY_DATA,
+                'research': DataCategory.RESEARCH_DATA,
+                'time_series': DataCategory.TIME_SERIES,
+                'geographic': DataCategory.GEOGRAPHIC_DATA,
+                'sensor': DataCategory.SENSOR_DATA,
+                'statistical': DataCategory.STATISTICAL_DATA,
             },
-            DashboardType.ML_METRICS: {
-                'layout': 'ml',
-                'components': [
-                    {'type': 'model_info', 'title': 'Model Information'},
-                    {'type': 'metric_cards', 'metrics': ['accuracy', 'precision', 'recall', 'f1']},
-                    {'type': 'confusion_matrix', 'title': 'Confusion Matrix'},
-                    {'type': 'roc_curve', 'title': 'ROC Curve'},
-                    {'type': 'pr_curve', 'title': 'Precision-Recall Curve'},
-                    {'type': 'feature_importance', 'title': 'Feature Importance'},
-                    {'type': 'prediction_distribution', 'title': 'Prediction Distribution'},
-                    {'type': 'error_analysis', 'title': 'Error Analysis'},
-                    {'type': 'per_class_metrics', 'title': 'Per-Class Performance'}
-                ],
-                'theme': 'technical',
-                'show_evaluation_options': True,
-                'show_model_comparison': True
-            },
-            DashboardType.CV_DASHBOARD: {
-                'layout': 'cv',
-                'components': [
-                    {'type': 'model_info', 'title': 'Vision Model'},
-                    {'type': 'metric_cards', 'metrics': ['accuracy', 'mAP', 'mIoU', 'top5_accuracy']},
-                    {'type': 'confusion_matrix', 'title': 'Class Confusion'},
-                    {'type': 'class_distribution', 'title': 'Class Distribution'},
-                    {'type': 'confidence_histogram', 'title': 'Confidence Distribution'},
-                    {'type': 'iou_distribution', 'title': 'IoU Distribution'},
-                    {'type': 'sample_predictions', 'title': 'Sample Predictions'},
-                    {'type': 'per_class_metrics', 'title': 'Per-Class Performance'}
-                ],
-                'theme': 'technical',
-                'show_image_samples': True,
-                'show_detection_viz': True
-            },
-            DashboardType.DATA_SCIENCE: {
-                'layout': 'data_science',
-                'components': [
-                    {'type': 'data_profile', 'title': 'Data Profile'},
-                    {'type': 'feature_analysis', 'title': 'Feature Analysis'},
-                    {'type': 'correlation_matrix', 'title': 'Correlations'},
-                    {'type': 'distribution_analysis', 'title': 'Distributions'},
-                    {'type': 'model_readiness', 'title': 'ML Readiness Score'},
-                    {'type': 'suggested_models', 'title': 'Suggested Models'},
-                    {'type': 'data_quality', 'title': 'Data Quality'}
-                ],
-                'theme': 'modern',
-                'show_feature_engineering': True,
-                'show_model_suggestions': True
-            },
-            DashboardType.DEVELOPER: {
-                'layout': 'developer',
-                'components': [
-                    {'type': 'system_overview', 'title': 'System Overview'},
-                    {'type': 'error_rate', 'title': 'Error Rate'},
-                    {'type': 'latency_chart', 'title': 'Response Latency'},
-                    {'type': 'endpoint_usage', 'title': 'API Endpoints'},
-                    {'type': 'log_viewer', 'title': 'Recent Logs'}
-                ],
-                'theme': 'dark',
-                'show_alerts': True
-            },
-            DashboardType.GENERAL: {
-                'layout': 'general',
-                'components': [
-                    {'type': 'data_overview', 'title': 'Data Overview'},
-                    {'type': 'column_summary', 'title': 'Column Summary'},
-                    {'type': 'basic_charts', 'title': 'Visualizations'}
-                ],
-                'theme': 'default'
+            'ml': {
+                'training': DataCategory.TRAINING_DATA,
+                'prediction': DataCategory.PREDICTIONS,
+                'classification': DataCategory.TRAINING_DATA,
+                'regression': DataCategory.PREDICTIONS,
+                'embedding': DataCategory.EMBEDDINGS,
+                'model_meta': DataCategory.FEATURE_DATA,
             }
         }
-        
-        return configs.get(dashboard_type, configs[DashboardType.GENERAL])
+        # Try finding partial match if exact key missing
+        if domain not in mapping.get(category_type, {}):
+             for key, val in mapping.get(category_type, {}).items():
+                 if key in domain:
+                     return val
+        return mapping.get(category_type, {}).get(domain, DataCategory.UNKNOWN)
     
-    def _get_recommendations(
-        self, 
-        persona: UserPersona, 
-        categories: Set[DataCategory]
-    ) -> List[str]:
+    def _get_recommendations(self, persona: UserPersona, categories: List[DataCategory]) -> List[str]:
         """Get recommended analysis based on persona."""
         recommendations = {
             UserPersona.BUSINESS: [
-                "📊 Revenue & Profit Analysis",
-                "👥 Customer Segmentation",
-                "📈 Sales Trends & Forecasting",
-                "🏆 Product Performance",
-                "🗺️ Regional/Branch Comparison",
-                "📋 KPI Dashboard",
-                "💰 Margin Analysis"
+                "Revenue & Profit Analysis",
+                "Customer Segmentation",
+                "Sales Trends & Forecasting",
+                "Product Performance",
+                "Regional/Branch Comparison",
+                "KPI Dashboard"
             ],
             UserPersona.ANALYTICS: [
-                "🔍 Exploratory Data Analysis",
-                "📊 Statistical Summary",
-                "🔗 Correlation Analysis",
-                "📈 Distribution Analysis",
-                "⚠️ Outlier Detection",
-                "📉 Trend Analysis",
-                "🧹 Data Cleaning Report",
-                "📐 Skewness & Kurtosis Analysis"
+                "Exploratory Data Analysis",
+                "Statistical Summary",
+                "Correlation Analysis",
+                "Distribution Analysis",
+                "Outlier Detection",
+                "Trend Analysis"
             ],
             UserPersona.ML_ENGINEER: [
-                "📊 Model Performance Metrics",
-                "🎯 Confusion Matrix Analysis",
-                "📈 ROC & PR Curves",
-                "🏆 Feature Importance",
-                "📉 Prediction Distribution",
-                "❌ Error Analysis",
-                "🔄 Cross-Validation Results",
-                "⚖️ Model Comparison"
-            ],
-            UserPersona.COMPUTER_VISION: [
-                "📊 Detection/Classification Metrics",
-                "🎯 Confusion Matrix",
-                "📐 IoU Analysis",
-                "📈 Confidence Distribution",
-                "🏷️ Per-Class Performance",
-                "🖼️ Sample Predictions",
-                "📉 mAP/mIoU Curves"
+                "Model Performance Metrics",
+                "Confusion Matrix",
+                "Feature Importance",
+                "Prediction Distribution",
+                "Error Analysis",
+                "Model Comparison"
             ],
             UserPersona.DATA_SCIENTIST: [
-                "🔍 EDA & Profiling",
-                "🛠️ Feature Engineering Ideas",
-                "📊 Statistical Tests",
-                "🎯 Model Baseline",
-                "📋 Data Quality Report",
-                "🧪 Hypothesis Testing",
-                "🔄 Cross-Validation Strategy"
+                "EDA & Profiling",
+                "Feature Engineering Ideas",
+                "Statistical Tests",
+                "Model Baseline",
+                "Data Quality Report",
+                "Hypothesis Testing"
             ],
             UserPersona.DEVELOPER: [
-                "📋 Log Analysis",
-                "❌ Error Rate Tracking",
-                "⚡ Performance Metrics",
-                "🔌 API Usage Patterns",
-                "📊 System Health"
+                "Log Analysis",
+                "Error Rate Tracking",
+                "Performance Metrics",
+                "API Usage Patterns"
             ]
         }
-        return recommendations.get(persona, ["📊 General Analysis"])
+        return recommendations.get(persona, ["General Analysis"])
     
-    def _generate_summary(
-        self, 
-        persona: UserPersona, 
-        domains: Set[str], 
-        datasets: List[Dict]
-    ) -> str:
+    def _get_dashboard_type(self, persona: UserPersona, categories: List[DataCategory]) -> DashboardType:
+        """Determine dashboard type."""
+        if DataCategory.MODEL_FILE in categories:
+            return DashboardType.MODEL
+        
+        dashboard_map = {
+            UserPersona.BUSINESS: DashboardType.BUSINESS,
+            UserPersona.ANALYTICS: DashboardType.ANALYTICS,
+            UserPersona.ML_ENGINEER: DashboardType.ML_METRICS,
+            UserPersona.DATA_SCIENTIST: DashboardType.DATA_SCIENCE,
+            UserPersona.DEVELOPER: DashboardType.DEVELOPER
+        }
+        return dashboard_map.get(persona, DashboardType.GENERAL)
+    
+    def _generate_summary(self, persona: UserPersona, domains: List[str], datasets: List[Dict]) -> str:
         """Generate a human-readable summary."""
         file_count = len(datasets)
-        domain_str = ", ".join(list(domains)[:3]) if domains else "general data"
+        domain_str = ", ".join(domains[:3]) if domains else "general data"
         
         summaries = {
-            UserPersona.BUSINESS: f"📊 Detected {file_count} business data file(s) related to {domain_str}. Dashboard configured as Power BI-style with KPIs, revenue trends, and business performance metrics.",
-            UserPersona.ANALYTICS: f"🔬 Detected {file_count} analytical dataset(s) for {domain_str}. Dashboard configured for comprehensive EDA with statistics, distributions, correlations, and outlier analysis.",
-            UserPersona.ML_ENGINEER: f"🤖 Detected {file_count} ML-related file(s) for {domain_str}. Dashboard configured for model performance tracking with accuracy, precision, recall, F1, confusion matrix, and ROC curves.",
-            UserPersona.COMPUTER_VISION: f"🖼️ Detected {file_count} computer vision file(s) for {domain_str}. Dashboard configured for CV metrics including mAP, IoU, class-wise performance, and detection visualization.",
-            UserPersona.DATA_SCIENTIST: f"🧬 Detected {file_count} data science file(s) covering {domain_str}. Dashboard configured for comprehensive EDA, feature analysis, and modeling insights.",
-            UserPersona.DEVELOPER: f"💻 Detected {file_count} technical data file(s). Dashboard configured for system monitoring, log analysis, and performance tracking."
+            UserPersona.BUSINESS: f"Detected {file_count} business data file(s) related to {domain_str}. Dashboard configured for business intelligence with KPIs, trends, and performance metrics.",
+            UserPersona.ANALYTICS: f"Detected {file_count} analytical dataset(s) for {domain_str}. Dashboard configured for exploratory analysis with statistics, distributions, and correlations.",
+            UserPersona.ML_ENGINEER: f"Detected {file_count} ML-related file(s) for {domain_str}. Dashboard configured for model performance tracking with metrics, predictions, and error analysis.",
+            UserPersona.DATA_SCIENTIST: f"Detected {file_count} data science file(s) covering {domain_str}. Dashboard configured for comprehensive EDA and modeling insights.",
+            UserPersona.DEVELOPER: f"Detected {file_count} technical data file(s). Dashboard configured for system monitoring and log analysis."
         }
-        return summaries.get(persona, f"📁 Detected {file_count} data file(s). General analysis dashboard configured.")
+        return summaries.get(persona, f"Detected {file_count} data file(s). General analysis dashboard configured.")
 
 
 # Singleton
-enhanced_persona_detector = EnhancedPersonaDetector()
+enhanced_persona_detector = PersonaDetector()

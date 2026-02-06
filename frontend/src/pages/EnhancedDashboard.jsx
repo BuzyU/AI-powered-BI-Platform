@@ -78,26 +78,36 @@ const PERSONA_INFO = {
   unknown: { icon: '📈', name: 'General Analytics', color: '#94a3b8' }
 }
 
+const DASHBOARD_TYPES = [
+  { value: 'power_bi_style', label: 'Business Intelligence' },
+  { value: 'eda_analytics', label: 'Exploratory & Analytics' },
+  { value: 'ml_metrics', label: 'ML Performance' },
+  { value: 'cv_dashboard', label: 'Computer Vision' },
+  { value: 'data_science', label: 'Data Science' }
+]
+
 export default function EnhancedDashboard() {
   const { sessionId } = useSession()
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [dashboard, setDashboard] = useState(null)
+  const [selectedType, setSelectedType] = useState(null)
   const [showModelEvaluator, setShowModelEvaluator] = useState(false)
 
   // Fetch enhanced dashboard
-  const fetchDashboard = useCallback(async (forceRefresh = false) => {
+  const fetchDashboard = useCallback(async (forceRefresh = false, typeOverride = null) => {
     if (!sessionId) return
-    
+
     setLoading(true)
     setError(null)
-    
+
     try {
-      const url = `${API_BASE}/dashboard/adaptive${forceRefresh ? '?force_refresh=true' : ''}`
+      const typeParam = forceRefresh && (typeOverride || selectedType) ? `&dashboard_type=${typeOverride || selectedType}` : (selectedType ? `&dashboard_type=${selectedType}` : '')
+      const url = `${API_BASE}/dashboard/adaptive?force_refresh=${forceRefresh}${typeParam}`
       const response = await fetch(url, {
         headers: { 'X-Session-Id': sessionId }
       })
-      
+
       if (!response.ok) {
         if (response.status === 400) {
           setDashboard(null)
@@ -107,7 +117,7 @@ export default function EnhancedDashboard() {
         const errData = await response.json().catch(() => ({}))
         throw new Error(errData.detail || 'Failed to load dashboard')
       }
-      
+
       const data = await response.json()
       setDashboard(data)
     } catch (err) {
@@ -151,6 +161,13 @@ export default function EnhancedDashboard() {
     )
   }
 
+  const handleTypeChange = (e) => {
+    const newType = e.target.value
+    setSelectedType(newType)
+    // When manually changing, we want to force refresh to get the new layout
+    fetchDashboard(false, newType)
+  }
+
   if (!dashboard) {
     return (
       <div className="enhanced-dashboard-empty">
@@ -178,31 +195,45 @@ export default function EnhancedDashboard() {
             </p>
           </div>
         </div>
-        
+
         <div className="header-right">
           <div className="persona-badge" style={{ backgroundColor: personaInfo.color }}>
             {personaInfo.name}
           </div>
-          
-          {dashboard.has_model && (
-            <button 
-              className="btn-evaluate"
-              onClick={() => setShowModelEvaluator(!showModelEvaluator)}
+
+          <div className="dashboard-controls">
+            <select
+              className="type-select"
+              value={selectedType || ''}
+              onChange={handleTypeChange}
+              style={{ borderColor: personaInfo.color }}
             >
-              {showModelEvaluator ? 'Hide Evaluator' : '📈 Evaluate Model'}
+              <option value="">Auto-Detect ({dashboard.persona_detection?.persona?.replace('_', ' ') || 'Default'})</option>
+              {DASHBOARD_TYPES.map(t => (
+                <option key={t.value} value={t.value}>{t.label}</option>
+              ))}
+            </select>
+
+            {dashboard.has_model && (
+              <button
+                className="btn-evaluate"
+                onClick={() => setShowModelEvaluator(!showModelEvaluator)}
+              >
+                {showModelEvaluator ? 'Hide Evaluator' : '📈 Evaluate Model'}
+              </button>
+            )}
+
+            <button className="btn-refresh" onClick={() => fetchDashboard(true)}>
+              🔄 Refresh
             </button>
-          )}
-          
-          <button className="btn-refresh" onClick={() => fetchDashboard(true)}>
-            🔄 Refresh
-          </button>
+          </div>
         </div>
       </header>
 
       {/* Model Evaluator */}
       {showModelEvaluator && dashboard.has_model && (
         <div className="model-evaluator-container">
-          <ModelEvaluator 
+          <ModelEvaluator
             modelId={dashboard.model_info?.id}
             modelInfo={dashboard.model_info}
             onEvaluationComplete={handleEvaluationComplete}
@@ -213,7 +244,7 @@ export default function EnhancedDashboard() {
       {/* Main Content - Render sections based on dashboard type */}
       <main className="dashboard-main">
         {dashboard.sections?.map((section, idx) => (
-          <DashboardSection 
+          <DashboardSection
             key={section.id || idx}
             section={section}
             colors={colors}
@@ -244,55 +275,55 @@ function DashboardSection({ section, colors, persona }) {
       case 'kpi_grid':
       case 'stats_grid':
         return <KPIGrid data={section.stats || section.charts} colors={colors} />
-      
+
       case 'metric_cards':
         return <MetricCards metrics={section.metrics} colors={colors} />
-      
+
       case 'chart_grid':
         return <ChartGrid charts={section.charts} colors={colors} />
-      
+
       case 'confusion_matrix':
         return <ConfusionMatrixChart data={section.data} colors={colors} />
-      
+
       case 'heatmap':
         return <HeatmapChart data={section.data} colors={colors} />
-      
+
       case 'stats_table':
       case 'metrics_table':
       case 'feature_table':
         return <DataTable data={section.data} columns={section.columns} />
-      
+
       case 'data_table':
         return <DataTable data={section.data?.rows} columns={section.data?.columns} />
-      
+
       case 'outlier_table':
       case 'missing_table':
         return <DataTable data={section.data} />
-      
+
       case 'scatter':
         return <ScatterPlot data={section.data} colors={colors} />
-      
+
       case 'residual_analysis':
         return <ResidualAnalysis stats={section.stats} histogram={section.histogram} colors={colors} />
-      
+
       case 'prompt':
         return <ActionPrompt content={section.content} />
-      
+
       case 'message':
         return <MessageBox content={section.content} />
-      
+
       case 'model_info':
         return <ModelInfoCard data={section.data} />
-      
+
       case 'readiness_score':
         return <ReadinessScore score={section.score} issues={section.issues} suggestions={section.suggestions} />
-      
+
       case 'data_profile':
         return <DataProfile data={section.data} />
-      
+
       case 'error_analysis':
         return <ErrorAnalysis data={section.data} />
-      
+
       default:
         return <GenericSection section={section} colors={colors} />
     }
@@ -377,7 +408,7 @@ function ChartGrid({ charts, colors }) {
 
 // Responsive Chart Component
 function ResponsiveChart({ chart, colors }) {
-  const data = (chart.data?.values && chart.data?.labels) ? 
+  const data = (chart.data?.values && chart.data?.labels) ?
     chart.data.labels.map((label, i) => ({ name: label, value: chart.data.values[i] })) :
     (Array.isArray(chart.data) ? chart.data : [])
 
@@ -394,7 +425,7 @@ function ResponsiveChart({ chart, colors }) {
           </BarChart>
         </ResponsiveContainer>
       )
-    
+
     case 'line':
       return (
         <ResponsiveContainer width="100%" height={300}>
@@ -407,7 +438,7 @@ function ResponsiveChart({ chart, colors }) {
           </LineChart>
         </ResponsiveContainer>
       )
-    
+
     case 'pie':
       return (
         <ResponsiveContainer width="100%" height={300}>
@@ -430,15 +461,15 @@ function ResponsiveChart({ chart, colors }) {
           </PieChart>
         </ResponsiveContainer>
       )
-    
+
     case 'histogram':
-      const histData = (chart.data?.counts && chart.data?.bins) ? 
+      const histData = (chart.data?.counts && chart.data?.bins) ?
         chart.data.counts.map((count, i) => ({
-          bin: `${chart.data.bins[i]?.toFixed?.(1) || chart.data.bins[i]}-${chart.data.bins[i+1]?.toFixed?.(1) || chart.data.bins[i+1] || ''}`,
+          bin: `${chart.data.bins[i]?.toFixed?.(1) || chart.data.bins[i]}-${chart.data.bins[i + 1]?.toFixed?.(1) || chart.data.bins[i + 1] || ''}`,
           count
         })) :
         (Array.isArray(chart.data?.values) ? chart.data.values.slice(0, 30).map((v, i) => ({ bin: i, count: v })) : [])
-      
+
       return (
         <ResponsiveContainer width="100%" height={300}>
           <BarChart data={histData}>
@@ -450,7 +481,7 @@ function ResponsiveChart({ chart, colors }) {
           </BarChart>
         </ResponsiveContainer>
       )
-    
+
     default:
       return (
         <div className="chart-placeholder">
@@ -482,8 +513,8 @@ function ConfusionMatrixChart({ data, colors }) {
               {row.map((cell, j) => {
                 const maxVal = Math.max(...matrix.flat())
                 const intensity = cell / maxVal
-                const bgColor = i === j ? 
-                  `rgba(34, 197, 94, ${0.2 + intensity * 0.6})` : 
+                const bgColor = i === j ?
+                  `rgba(34, 197, 94, ${0.2 + intensity * 0.6})` :
                   `rgba(239, 68, 68, ${intensity * 0.6})`
                 return (
                   <td key={j} style={{ backgroundColor: bgColor }}>
@@ -521,8 +552,8 @@ function HeatmapChart({ data, colors }) {
               {columns.map((_, j) => {
                 const value = matrix[rowLabel]?.[columns[j]] || 0
                 const intensity = Math.abs(value)
-                const bgColor = value >= 0 ? 
-                  `rgba(59, 130, 246, ${intensity})` : 
+                const bgColor = value >= 0 ?
+                  `rgba(59, 130, 246, ${intensity})` :
                   `rgba(239, 68, 68, ${intensity})`
                 return (
                   <td key={j} style={{ backgroundColor: bgColor }}>
@@ -557,8 +588,8 @@ function DataTable({ data, columns }) {
             <tr key={i}>
               {cols.map((col, j) => (
                 <td key={j}>
-                  {typeof row[col] === 'number' ? 
-                    (Number.isInteger(row[col]) ? row[col] : row[col].toFixed(4)) : 
+                  {typeof row[col] === 'number' ?
+                    (Number.isInteger(row[col]) ? row[col] : row[col].toFixed(4)) :
                     row[col]?.toString() || '-'}
                 </td>
               ))}
@@ -584,10 +615,10 @@ function ScatterPlot({ data, colors }) {
         <Tooltip cursor={{ strokeDasharray: '3 3' }} />
         <Scatter name="Predictions" data={data} fill={colors.primary} />
         {/* Perfect prediction line */}
-        <Line 
-          type="linear" 
-          dataKey="actual" 
-          stroke="#888" 
+        <Line
+          type="linear"
+          dataKey="actual"
+          stroke="#888"
           strokeDasharray="5 5"
         />
       </ScatterChart>
@@ -622,7 +653,7 @@ function ResidualAnalysis({ stats, histogram, colors }) {
           <span className="stat-value">{stats?.kurtosis?.toFixed(4)}</span>
         </div>
       </div>
-      
+
       {histData.length > 0 && (
         <div className="residual-histogram">
           <h4>Residual Distribution</h4>
@@ -652,8 +683,8 @@ function ActionPrompt({ content }) {
             {action.label}
           </button>
         )) || (
-          <button className="btn-action">{content?.action || 'Take Action'}</button>
-        )}
+            <button className="btn-action">{content?.action || 'Take Action'}</button>
+          )}
       </div>
     </div>
   )
@@ -711,17 +742,17 @@ function ReadinessScore({ score, issues, suggestions }) {
   return (
     <div className="readiness-score">
       <div className="score-display">
-        <div 
+        <div
           className="score-circle"
-          style={{ 
-            background: `conic-gradient(${getScoreColor(score)} ${score * 3.6}deg, #e5e7eb 0deg)` 
+          style={{
+            background: `conic-gradient(${getScoreColor(score)} ${score * 3.6}deg, #e5e7eb 0deg)`
           }}
         >
           <span className="score-value">{score}</span>
         </div>
         <span className="score-label">ML Readiness</span>
       </div>
-      
+
       {issues?.length > 0 && (
         <div className="score-issues">
           <h4>⚠️ Issues</h4>
@@ -730,7 +761,7 @@ function ReadinessScore({ score, issues, suggestions }) {
           </ul>
         </div>
       )}
-      
+
       {suggestions?.length > 0 && (
         <div className="score-suggestions">
           <h4>💡 Suggestions</h4>
@@ -781,7 +812,7 @@ function ErrorAnalysis({ data }) {
           <span className="stat-value">{data?.error_rate?.toFixed(2)}%</span>
         </div>
       </div>
-      
+
       {Array.isArray(data?.confused_pairs) && data.confused_pairs.length > 0 && (
         <div className="confused-pairs">
           <h4>Most Confused Pairs</h4>

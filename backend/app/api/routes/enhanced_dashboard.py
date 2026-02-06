@@ -27,29 +27,21 @@ class RefreshRequest(BaseModel):
 
 
 @router.get("/adaptive")
-async def get_adaptive_dashboard(
+def get_adaptive_dashboard(
     force_refresh: bool = Query(False, description="Force regenerate dashboard"),
+    dashboard_type: Optional[str] = Query(None, description="Manually selected dashboard type"),
     x_session_id: str = Header("default_session")
 ):
     """
     Generate a persona-aware adaptive dashboard.
-    
-    Automatically detects:
-    - Business User → Power BI style dashboard (KPIs, revenue, profit)
-    - Analytics User → EDA dashboard (distributions, correlations, outliers)
-    - ML Engineer → ML metrics dashboard (accuracy, confusion matrix, ROC)
-    - Computer Vision → CV metrics dashboard (mAP, IoU, detections)
-    - Data Scientist → Mixed dashboard (EDA + ML readiness)
-    
-    All metrics are calculated dynamically from the actual data.
     """
     # Get session data
     datasets = state.get_all_datasets(x_session_id)
     if not datasets:
         raise HTTPException(400, "No datasets in session. Upload data first.")
     
-    # Check cache (unless force refresh)
-    if not force_refresh:
+    # Check cache (unless force refresh or manual override)
+    if not force_refresh and not dashboard_type:
         cached = state.get_dashboard_config(x_session_id)
         if cached and cached.get('version') == '2.0':  # New enhanced version
             return cached
@@ -87,7 +79,6 @@ async def get_adaptive_dashboard(
     
     # If only model, no data
     if not datasets_with_df and model_files:
-        # Return model-only dashboard
         return _generate_model_only_dashboard(model_info)
     
     # Detect persona using enhanced detector
@@ -96,9 +87,27 @@ async def get_adaptive_dashboard(
         model_info=model_info
     )
     
+    # MANUAL OVERRIDE: If dashboard_type is provided, override the result
+    if dashboard_type:
+        logger.info(f"Manual dashboard override: {dashboard_type}")
+        persona_result.dashboard_type = DashboardType(dashboard_type)
+        # Map dashboard type back to a plausible persona for consistency
+        type_to_persona = {
+            'power_bi_style': UserPersona.BUSINESS,
+            'eda_analytics': UserPersona.ANALYTICS,
+            'ml_metrics': UserPersona.ML_ENGINEER,
+            'data_science': UserPersona.DATA_SCIENTIST,
+            'developer_dashboard': UserPersona.DEVELOPER,
+            'cv_dashboard': UserPersona.COMPUTER_VISION if hasattr(UserPersona, 'COMPUTER_VISION') else UserPersona.ML_ENGINEER
+        }
+        if dashboard_type in type_to_persona:
+            persona_result.persona = type_to_persona[dashboard_type]
+            persona_result.summary = f"Manually switched to {dashboard_type.replace('_', ' ').title()} view."
+            
+    
     logger.info(f"Detected persona: {persona_result.persona.value}, "
                 f"confidence: {persona_result.confidence:.2f}, "
-                f"dashboard type: {persona_result.dashboard_type.value}")
+                f"dashboard type: {persona_result.dashboard_type.value if hasattr(persona_result.dashboard_type, 'value') else persona_result.dashboard_type}")
     
     # Get evaluation results if available
     evaluation = state.get_evaluation(x_session_id)
@@ -187,7 +196,7 @@ def _generate_model_only_dashboard(model_info: Dict) -> Dict[str, Any]:
 
 
 @router.get("/detect-persona")
-async def detect_persona(x_session_id: str = Header("default_session")):
+def detect_persona(x_session_id: str = Header("default_session")):
     """
     Detect the user persona based on uploaded data without generating full dashboard.
     
@@ -240,7 +249,7 @@ async def detect_persona(x_session_id: str = Header("default_session")):
 
 
 @router.get("/statistics")
-async def get_data_statistics(
+def get_data_statistics(
     dataset_id: Optional[str] = Query(None, description="Specific dataset ID"),
     x_session_id: str = Header("default_session")
 ):
@@ -314,7 +323,7 @@ async def get_data_statistics(
 
 
 @router.get("/business-metrics")
-async def get_business_metrics(
+def get_business_metrics(
     dataset_id: Optional[str] = Query(None),
     x_session_id: str = Header("default_session")
 ):
@@ -366,7 +375,7 @@ async def get_business_metrics(
 
 
 @router.post("/refresh")
-async def refresh_dashboard(
+def refresh_dashboard(
     request: RefreshRequest,
     x_session_id: str = Header("default_session")
 ):
@@ -381,7 +390,7 @@ async def refresh_dashboard(
         state.clear_dashboard_config(x_session_id)
     
     # Redirect to main endpoint
-    return await get_adaptive_dashboard(
+    return get_adaptive_dashboard(
         force_refresh=request.force_regenerate,
         x_session_id=x_session_id
     )
