@@ -140,6 +140,10 @@ class ModelService:
         if hasattr(model, 'n_features_in_'):
             info['n_features'] = model.n_features_in_
             
+            # Fallback: Generate generic names if missing so UI can still render inputs
+            if 'features' not in info:
+                info['features'] = [f"Feature {i}" for i in range(model.n_features_in_)]
+            
         # Check for Pipeline
         if type(model).__name__ == 'Pipeline':
             info['is_pipeline'] = True
