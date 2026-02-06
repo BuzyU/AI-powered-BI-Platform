@@ -329,8 +329,34 @@ class ModelService:
                             # Fallback failed. Raise the original name error.
                             raise ValueError(f"Missing features: {', '.join(missing_features[:5])}. (Shape valid check also failed: got {X_candidate.shape[1]} features, expected {model.n_features_in_})")
                     else:
-                        # List/Array input - we can't filter by name, so we'll fall through to shape check
-                        pass
+                        # List/Array input - we can't filter by name, but we can try shape-based filtering if it's a DataFrame
+                        if isinstance(data, pd.DataFrame):
+                             # Drop known target/metadata columns to isolate likely features
+                             ignore_cols = {'target', 'label', 'y', 'actual', 'class', 'id', 'index'}
+                             likely_features = [
+                                 c for c in data.columns 
+                                 if c.lower() not in ignore_cols and not c.lower().startswith('unnamed')
+                             ]
+                             X_candidate = data[likely_features].select_dtypes(include=[np.number]).values
+                             
+                             if hasattr(model, 'n_features_in_') and X_candidate.shape[1] == model.n_features_in_:
+                                 X = X_candidate
+
+
+
+            # Global Fallback: If shape mismatch likely due to extra columns (target, IDs), try smart filtering
+            # This handles models WITHOUT feature names (where the block above is skipped)
+            if hasattr(model, 'n_features_in_') and X.shape[1] != model.n_features_in_ and isinstance(data, pd.DataFrame):
+                ignore_cols = {'target', 'label', 'y', 'actual', 'class', 'id', 'index'}
+                likely_features = [
+                    c for c in data.columns 
+                    if c.lower() not in ignore_cols and not c.lower().startswith('unnamed')
+                ]
+                X_candidate = data[likely_features].select_dtypes(include=[np.number]).values
+                
+                if X_candidate.shape[1] == model.n_features_in_:
+                    logger.info(f"Shape mismatch ({X.shape[1]} vs {model.n_features_in_}) resolved by smart filtering.")
+                    X = X_candidate
 
             # Final Shape Check (Safety Net)
             if hasattr(model, 'n_features_in_') and X.shape[1] != model.n_features_in_:
