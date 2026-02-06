@@ -17,6 +17,24 @@ function ModelPage({ model, onBack }) {
     const [activeTab, setActiveTab] = useState('info')
     const [customInput, setCustomInput] = useState({})
 
+    // Helper to safely parse errors
+    const parseError = (err) => {
+        if (!err) return 'Unknown error'
+        if (typeof err === 'string') return err
+
+        // Handle Pydantic validation errors (array)
+        if (Array.isArray(err.detail)) {
+            return err.detail.map(e => e.msg).join('\n')
+        }
+
+        // Handle simple detail string or object
+        if (err.detail) {
+            return typeof err.detail === 'string' ? err.detail : JSON.stringify(err.detail)
+        }
+
+        return err.message || JSON.stringify(err)
+    }
+
     // Fetch datasets for evaluation
     useEffect(() => {
         const fetchDatasets = async () => {
@@ -47,7 +65,7 @@ function ModelPage({ model, onBack }) {
 
             if (!res.ok) {
                 const err = await res.json()
-                throw new Error(err.detail || 'Failed to load model')
+                throw new Error(parseError(err))
             }
 
             const data = await res.json()
@@ -126,7 +144,7 @@ function ModelPage({ model, onBack }) {
 
             if (!res.ok) {
                 const err = await res.json()
-                throw new Error(err.detail || 'Evaluation failed')
+                throw new Error(parseError(err))
             }
 
             const data = await res.json()
@@ -163,7 +181,7 @@ function ModelPage({ model, onBack }) {
 
             if (!res.ok) {
                 const err = await res.json()
-                throw new Error(err.detail || 'Prediction failed')
+                throw new Error(parseError(err))
             }
 
             const data = await res.json()
@@ -197,7 +215,7 @@ function ModelPage({ model, onBack }) {
 
             if (!res.ok) {
                 const err = await res.json()
-                throw new Error(err.detail || 'Prediction failed')
+                throw new Error(parseError(err))
             }
 
             const data = await res.json()

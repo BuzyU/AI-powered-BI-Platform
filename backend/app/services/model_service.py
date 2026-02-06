@@ -289,14 +289,44 @@ class ModelService:
         framework = metadata.get('framework', '')
         
         try:
-            # Strict Feature Validation
+            # Strict Feature Validation & Selection
+            if hasattr(model, 'feature_names_in_') and feature_names:
+                # 1. Try Strict Name Matching
+                required_features = list(model.feature_names_in_)
+                missing_features = [f for f in required_features if f not in feature_names]
+                
+                if not missing_features:
+                    # All names match! Filter strictly (drops extra cols like target/ID)
+                    if isinstance(data, pd.DataFrame):
+                        X = data[required_features].values
+                
+                else:
+                    # 2. Relaxed Fallback: Shape-based matching
+                    # If names don't match, maybe the user uploaded generic 'feature1, feature2, target'
+                    # Try dropping common non-feature columns and checking count
+                    logger.warning(f"Feature name mismatch. Missing: {missing_features}. Attempting shape-based fallback.")
+                    
+                    if isinstance(data, pd.DataFrame):
+                        # Drop known target/metadata columns to isolate likely features
+                        ignore_cols = {'target', 'label', 'y', 'actual', 'class', 'id', 'index'}
+                        likely_features = [c for c in data.columns if c.lower() not in ignore_cols]
+                        
+                        # Use all numeric columns from the filtered set
+                        X_candidate = data[likely_features].select_dtypes(include=[np.number]).values
+                        
+                        if X_candidate.shape[1] == model.n_features_in_:
+                            # Success! The count matches. Use it (ignoring names).
+                            X = X_candidate
+                        else:
+                            # Fallback failed. Raise the original name error.
+                            raise ValueError(f"Missing features: {', '.join(missing_features[:5])}. (Shape valid check also failed: got {X_candidate.shape[1]} features, expected {model.n_features_in_})")
+                    else:
+                        # List/Array input - we can't filter by name, so we'll fall through to shape check
+                        pass
+
+            # Final Shape Check (Safety Net)
             if hasattr(model, 'n_features_in_') and X.shape[1] != model.n_features_in_:
                 raise ValueError(f"Feature mismatch: Model expects {model.n_features_in_} features, but input has {X.shape[1]}.")
-            
-            if hasattr(model, 'feature_names_in_') and feature_names:
-                missing_features = [f for f in model.feature_names_in_ if f not in feature_names]
-                if missing_features:
-                    raise ValueError(f"Missing features: {', '.join(missing_features[:5])}{'...' if len(missing_features) > 5 else ''}")
 
             if 'sklearn' in framework or 'pickle' in framework or 'scikit-learn' in framework:
                 return self._predict_sklearn(model, X, metadata)
