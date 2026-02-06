@@ -308,8 +308,12 @@ class ModelService:
                     
                     if isinstance(data, pd.DataFrame):
                         # Drop known target/metadata columns to isolate likely features
+                        # Drop known target/metadata columns to isolate likely features
                         ignore_cols = {'target', 'label', 'y', 'actual', 'class', 'id', 'index'}
-                        likely_features = [c for c in data.columns if c.lower() not in ignore_cols]
+                        likely_features = [
+                            c for c in data.columns 
+                            if c.lower() not in ignore_cols and not c.lower().startswith('unnamed')
+                        ]
                         
                         # Use all numeric columns from the filtered set
                         X_candidate = data[likely_features].select_dtypes(include=[np.number]).values

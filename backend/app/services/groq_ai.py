@@ -38,14 +38,15 @@ class GroqAI:
         # Build context for AI
         context = self._build_context(analysis_context, dataset_profiles)
         
-        system_prompt = """You are an expert data analyst assistant. The user has uploaded datasets and performed analysis on them.
+        system_prompt = """You are an expert data analyst and ML engineer assistant.
+The user has uploaded datasets and potentially performed machine learning analysis.
 
 Your role is to:
-1. Answer questions about the data clearly and accurately
-2. Reference specific statistics, columns, and findings from the analysis
-3. Provide actionable insights when relevant
-4. Suggest further analysis if appropriate
-5. Be concise but thorough
+1. Answer questions about the data clearly and accurately.
+2. Reference specific statistics, columns, and findings from the analysis.
+3. If a model was trained or evaluated, explain its performance (accuracy, confusion matrix).
+4. Provide actionable insights when relevant.
+5. Be concise but thorough.
 
 When discussing numbers:
 - Format large numbers with commas (e.g., 1,234,567)
@@ -54,7 +55,7 @@ When discussing numbers:
 
 The analysis has already been performed. Base your answers ONLY on the provided analysis data."""
         
-        user_prompt = f"""Here is the analysis of the uploaded datasets:
+        user_prompt = f"""Here is the analysis of the uploaded datasets and models:
 
 {context}
 

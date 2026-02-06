@@ -116,7 +116,9 @@
 }
 
 .message-user .message-text {
-    background: var(--primary-color);
+    background: #4f46e5;
+    /* Fallback for var(--primary-color) */
+    background: var(--primary-color, #4f46e5);
     color: white;
     border-bottom-right-radius: 2px;
 }

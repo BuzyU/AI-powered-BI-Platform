@@ -248,7 +248,9 @@ class AnswerDetail(BaseModel):
 
 class AnswerResponse(BaseModel):
     question: str
-    answer: Dict[str, Any]
+    answer: Any  # Can be string (LLM) or dict (Analytics)
+    success: bool = True
+    meta: Optional[Dict[str, Any]] = None
 
 
 # Generic responses

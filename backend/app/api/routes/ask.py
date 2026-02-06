@@ -1,102 +1,117 @@
-# Q&A API Routes
-from fastapi import APIRouter, Depends, HTTPException
+# Q&A API Routes - Session-Aware
+from fastapi import APIRouter, Depends, HTTPException, Header
 from sqlalchemy.ext.asyncio import AsyncSession
-from typing import Dict, Any
-import structlog
+from typing import Dict, Any, Optional
 
-from app.api.deps import get_session, get_tenant
+from app.api.deps import get_session, get_tenant, get_validated_session_id
 from app.models.db import Tenant
 from app.models.schemas import AskRequest, AnswerResponse
-from app.layers.l10_llm.qa import answer_question
+from app.services import state
+from app.services.groq_ai import create_groq_ai
+from app.config import settings
+
+import structlog
 
 router = APIRouter()
 logger = structlog.get_logger()
 
 
-# Question patterns for routing
-QUESTION_PATTERNS = {
-    "revenue": ["revenue", "sales", "income", "earnings", "how much"],
-    "loss": ["loss", "losing", "negative", "unprofitable"],
-    "profit": ["profit", "margin", "profitable"],
-    "customer": ["customer", "client", "buyer", "who buys"],
-    "product": ["product", "service", "offering", "item"],
-    "growth": ["grow", "increase", "improve", "focus"],
-    "risk": ["risk", "risky", "dangerous", "concern"],
-    "discontinue": ["discontinue", "stop", "remove", "eliminate"],
-    "compare": ["compare", "vs", "versus", "difference"]
-}
-
-
-def classify_question(question: str) -> str:
-    """Classify question to route to appropriate handler."""
-    question_lower = question.lower()
-    
-    for category, keywords in QUESTION_PATTERNS.items():
-        for keyword in keywords:
-            if keyword in question_lower:
-                return category
-    
-    return "general"
-
-
 @router.post("/ask", response_model=AnswerResponse)
 async def ask_question(
     request: AskRequest,
-    db: AsyncSession = Depends(get_session),
-    tenant: Tenant = Depends(get_tenant)
+    x_session_id: str = Header("default_session"),
+    db: AsyncSession = Depends(get_session)
 ):
     """
-    Answer natural language questions about the business data.
-    Uses deterministic analytics for data, LLM for explanation.
+    Answer natural language questions about the specific session's data.
+    Uses Groq AI with context from the uploaded datasets.
     """
+    # 1. Validate Session
+    session_id = await get_validated_session_id(x_session_id)
     question = request.question.strip()
     
     if not question:
         raise HTTPException(status_code=400, detail="Question cannot be empty")
     
-    logger.info("Processing question", question=question[:100])
+    logger.info("Processing session question", session_id=session_id, question=question[:50])
     
-    try:
-        # Classify question
-        question_type = classify_question(question)
-        
-        # Get answer from QA handler
-        answer = await answer_question(
-            db=db,
-            tenant_id=tenant.id,
-            question=question,
-            question_type=question_type,
-            context=request.context
-        )
-        
+    # 2. Retrieve Session Context
+    # We need to know what data the user is talking about
+    analysis = state.get_analysis(session_id)
+    profiles = state.get_all_profiles(session_id)
+    
+    # If no analysis exists yet, we can't really answer data questions
+    if not analysis and not profiles:
+        # Check if they at least have a model loaded
+        # (This is a future enhancement: chat with models)
         return AnswerResponse(
             question=question,
-            answer=answer
+            answer="I don't see any analyzed data in this session yet. Please upload a dataset and run analysis, or upload a model.",
+            success=False
+        )
+
+    # 3. Initialize AI Service
+    if not settings.GROQ_API_KEY:
+        logger.warning("GROQ_API_KEY not set")
+        return AnswerResponse(
+            question=question,
+            answer="AI service is not configured (missing API key). responding with limited context.",
+            success=False
+        )
+
+    try:
+        ai_service = create_groq_ai(settings.GROQ_API_KEY)
+        
+        # 4. Ask AI with Context
+        result = await ai_service.answer_question(
+            question=question,
+            analysis_context=analysis,
+            dataset_profiles=profiles
         )
         
+        await ai_service.close()
+        
+        if result.get("success"):
+            return AnswerResponse(
+                question=question,
+                answer=result["answer"],
+                meta=result.get("tokens_used")
+            )
+        else:
+             # Fallback error message from service
+             return AnswerResponse(
+                question=question,
+                answer=result.get("answer", "I encountered an error analyzing your question."),
+                success=False
+            )
+            
     except Exception as e:
-        logger.error("Question answering failed", error=str(e))
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to process question: {str(e)}"
+        logger.error("AI Question Error", error=str(e))
+        return AnswerResponse(
+            question=question,
+            answer="I ran into a technical issue processing your request.",
+            success=False
         )
 
 
 @router.get("/ask/suggestions")
 async def get_question_suggestions(
-    db: AsyncSession = Depends(get_session),
-    tenant: Tenant = Depends(get_tenant)
+    x_session_id: str = Header("default_session")
 ):
-    """Get suggested questions based on available data."""
+    """Get context-aware suggestions based on session data."""
+    session_id = await get_validated_session_id(x_session_id)
+    analysis = state.get_analysis(session_id)
+    
     suggestions = [
-        "What is my total revenue?",
-        "Where am I losing money?",
-        "Which products are most profitable?",
-        "Which offerings should I focus on?",
-        "How many customers do I have?",
-        "What is my profit margin?",
-        "Which offerings are risky?",
-        "Compare this month to last month"
+        "What patterns do you see in the data?",
+        "Are there any outliers?",
+        "Summarize the key findings",
+        "What is the data quality score?"
     ]
     
+    # Add data-specific suggestions if available
+    if analysis and analysis.get('kpis'):
+        for kpi in analysis['kpis'][:2]:
+            suggestions.append(f"Explain the {kpi['label']} metric")
+            
     return {"suggestions": suggestions}
